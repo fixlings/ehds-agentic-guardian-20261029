@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from typing import Any
 
-import httpx
+from mistralai.client import Mistral
 
 from guardian.contracts.budget import (
     DEFAULT_MODEL,
@@ -32,9 +31,8 @@ class MistralEuClient:
             raise ValueError("MISTRAL_API_KEY is not set")
         if base_url.rstrip("/") != MISTRAL_EU_BASE_URL:
             raise ValueError("Mistral client must use the EU host only")
-        self._api_key = key
-        self._base_url = MISTRAL_EU_BASE_URL.rstrip("/")
         self._timeout_s = timeout_s
+        self._client = Mistral(api_key=key, server_url=MISTRAL_EU_BASE_URL)
         self._resolved_model: str | None = None
         self._model_substitution_note: str | None = None
 
@@ -43,14 +41,12 @@ class MistralEuClient:
         return self._model_substitution_note
 
     def list_models(self) -> list[str]:
-        data = self._request("GET", "/v1/models")
-        items = data.get("data") or data.get("models") or []
+        listing = self._client.models.list(timeout_ms=int(self._timeout_s * 1000))
         ids: list[str] = []
-        for item in items:
-            if isinstance(item, str):
-                ids.append(item)
-            elif isinstance(item, dict) and item.get("id"):
-                ids.append(str(item["id"]))
+        for item in listing.data or []:
+            model_id = getattr(item, "id", None)
+            if model_id:
+                ids.append(str(model_id))
         return ids
 
     def resolve_model(self) -> str:
@@ -98,44 +94,22 @@ class MistralEuClient:
     def _complete_once(
         self, *, model: str, system: str, user: str, timeout_s: float
     ) -> dict[str, Any]:
-        payload = {
-            "model": model,
-            "messages": [
+        response = self._client.chat.complete(
+            model=model,
+            messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "response_format": {"type": "json_object"},
-            "temperature": 0,
-        }
-        data = self._request("POST", "/v1/chat/completions", json_body=payload, timeout_s=timeout_s)
-        choices = data.get("choices") or []
-        if not choices:
+            response_format={"type": "json_object"},
+            temperature=0,
+            timeout_ms=int(timeout_s * 1000),
+        )
+        if not response.choices:
             raise RuntimeError("Mistral completion returned no choices")
-        content = choices[0].get("message", {}).get("content", "")
+        content = response.choices[0].message.content
         if not content:
             raise RuntimeError("Mistral completion empty content")
         parsed = json.loads(content)
         if not isinstance(parsed, dict):
             raise RuntimeError("Mistral completion was not a JSON object")
         return parsed
-
-    def _request(
-        self,
-        method: str,
-        path: str,
-        *,
-        json_body: dict | None = None,
-        timeout_s: float | None = None,
-    ) -> dict[str, Any]:
-        timeout = timeout_s if timeout_s is not None else self._timeout_s
-        headers = {
-            "Authorization": f"Bearer {self._api_key}",
-            "Content-Type": "application/json",
-        }
-        url = f"{self._base_url}{path}"
-        if re.search(r"api\.mistral\.ai", url) and "api.eu.mistral.ai" not in url:
-            raise ValueError("Refusing non-EU Mistral host")
-        with httpx.Client(timeout=timeout) as client:
-            response = client.request(method, url, headers=headers, json=json_body)
-            response.raise_for_status()
-            return response.json()

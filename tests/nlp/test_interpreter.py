@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from guardian.contracts.schemas import PurposeCategory, SessionContext, TurnRecord
+from guardian.contracts.budget import DEFAULT_MODEL
 from guardian.nlp.interpreter import Interpreter
 from guardian.nlp.mistral_client import MistralEuClient
 
@@ -193,11 +194,10 @@ def test_mistral_eu_live_json_completion() -> None:
     if not models:
         pytest.skip("EU Mistral list_models returned no ids")
 
-    try:
-        model = client.resolve_model()
-    except RuntimeError as exc:
-        pytest.skip(str(exc))
+    if DEFAULT_MODEL not in models:
+        pytest.skip(f"{DEFAULT_MODEL} not listed on EU host; got: {', '.join(models)}")
 
+    model = DEFAULT_MODEL
     start = time.perf_counter()
     payload = client.complete_json(
         model=model,
