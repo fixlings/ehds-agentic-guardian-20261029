@@ -1,0 +1,34 @@
+{
+  "session_id": "22222222-2222-2222-2222-222222222222",
+  "decision": "reject",
+  "policy": {
+    "outcome": "reject",
+    "rule_id": "deny.insurance",
+    "reason_code": "purpose_forbidden_insurance",
+    "purpose_category": "insurance",
+    "purpose_changed": true,
+    "role": "public_health_researcher",
+    "evidence": [
+      "matched: insurance underwriting"
+    ],
+    "article_mapping": {
+      "status": "unresolved",
+      "citation": null,
+      "source_url": null
+    },
+    "authoritative": true
+  },
+  "interpretation": null,
+  "evidence": null,
+  "aggregate": null,
+  "explanation": "The follow-up asks for insurance underwriting. Deterministic policy rejected it. No aggregate was run.",
+  "audit_id": "audit-example-2",
+  "limitations": [
+    "Article mapping is unresolved."
+  ],
+  "model": null,
+  "tool_steps": 0,
+  "latency_ms": 4,
+  "synthetic": true,
+  "live_model": false
+}

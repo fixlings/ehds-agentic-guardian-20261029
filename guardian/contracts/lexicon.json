@@ -1,0 +1,94 @@
+{
+  "match": "casefold_longest_alias_word_boundary",
+  "codes": [
+    {
+      "system": "ICD-10",
+      "code": "C50",
+      "display": "Malignant neoplasm of breast",
+      "aliases": ["breast cancer", "breast-cancer", "brest cancer", "brest canser", "brustkrebs", "brust krebs", "mammakarzinom", "bc", "b.c.", "ca mammae", "c50"]
+    },
+    {
+      "system": "ICD-10",
+      "code": "C50.9",
+      "display": "Malignant neoplasm of breast, unspecified",
+      "aliases": ["c50.9", "breast cancer unspecified", "brustkrebs nicht näher bezeichnet"]
+    },
+    {
+      "system": "ICD-10",
+      "code": "C44",
+      "display": "Other and unspecified malignant neoplasm of skin",
+      "aliases": ["skin cancer", "hautkrebs", "c44"]
+    },
+    {
+      "system": "ICD-10",
+      "code": "E66",
+      "display": "Obesity",
+      "aliases": ["e66", "icd-10 e66", "diagnose adipositas", "adipositas-diagnose"]
+    },
+    {
+      "system": "ICD-10",
+      "code": "E11",
+      "display": "Type 2 diabetes mellitus",
+      "aliases": ["type 2 diabetes", "t2dm", "diabetes", "zuckerkrankheit", "zuckerkrank", "e11"]
+    },
+    {
+      "system": "LOINC",
+      "code": "39156-5",
+      "display": "Body mass index (BMI) [Ratio]",
+      "aliases": ["39156-5", "loinc 39156-5"]
+    },
+    {
+      "system": "ATC",
+      "code": "L02BG",
+      "display": "Aromatase inhibitors",
+      "aliases": ["aromatase inhibitor", "aromatase inhibitors", "aromatasehemmer", "l02bg"]
+    }
+  ],
+  "bmi_bands": [
+    {
+      "band": "obese",
+      "aliases": ["obese", "obesity", "adipositas", "fettleibig", "fettleibigkeit", "adipös", "adipoes", "fettsucht", "bmi>=30", "bmi >= 30", "bmi>= 30", "bmi > 30", "bmi over 30"]
+    },
+    {
+      "band": "overweight",
+      "aliases": ["overweight", "übergewichtig", "uebergewichtig", "übergewicht", "uebergewicht"]
+    },
+    {
+      "band": "normal",
+      "aliases": ["normal bmi", "normalgewicht"]
+    },
+    {
+      "band": "underweight",
+      "aliases": ["underweight", "untergewicht"]
+    }
+  ],
+  "elevated_bmi_aliases": ["high bmi", "elevated bmi", "zu hohem bmi", "zu hoher bmi", "zu hohes bmi", "chubby"],
+  "elevated_bmi_bands": ["overweight", "obese"],
+  "sex": [
+    {"sex": "female", "aliases": ["women", "woman", "female", "females", "frauen", "frau"]},
+    {"sex": "male", "aliases": ["men", "man", "männer", "maenner", "männlich", "male"]}
+  ],
+  "age_expressions": [
+    {
+      "aliases": ["ü50", "ue50", "über 50", "ueber 50", "over 50", "aged 50 or older", "50+", "ab 50", "50 or older"],
+      "age_bands": ["50-59", "60-69", "70+"]
+    }
+  ],
+  "regions": ["Wien", "Ost", "Süd", "West", "Nord"],
+  "negation_cues": ["not including", "without", "ohne", "nicht", "nich", "kein", "keine", "excluding"],
+  "negated_sex_flips": true,
+  "measure_cues": [
+    {"measure": "rate_per_1000", "aliases": ["per 1000", "pro 1000"]},
+    {"measure": "prevalence", "aliases": ["prevalence", "prävalenz", "praevalenz", "häufigkeit", "haeufigkeit"]},
+    {"measure": "count", "aliases": ["how many", "anzahl", "zahlen", "counts", "statistik", "fälle", "faelle"]}
+  ],
+  "group_by_cues": [
+    {"group_by": "bmi_band", "aliases": ["by bmi band", "nach bmi", "by bmi"]},
+    {"group_by": "age_band", "aliases": ["nach altersgruppe", "by age", "by age band"]},
+    {"group_by": "sex", "aliases": ["by sex", "nach geschlecht"]},
+    {"group_by": "measurement_timing", "aliases": ["by timing", "nach zeitpunkt"]}
+  ],
+  "causal_claim_cues": ["prove that", "causes", "caused", "verursacht", "beweis", "kausal"],
+  "generic_unresolved": ["krebs", "cancer", "gewicht", "weight", "supercancer", "xyz999"],
+  "unknown_code_pattern": "\\b[A-Za-z]{1,3}\\d{2,4}(?:\\.\\d{1,2})?\\b"
+}

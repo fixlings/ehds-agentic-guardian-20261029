@@ -1,0 +1,7 @@
+{
+  "message": "How many women aged 50 or older have breast cancer and BMI>=30?",
+  "role": "public_health_researcher",
+  "stated_purpose": "Public-health surveillance of cancer prevalence",
+  "session_id": null,
+  "dataset_id": "synthetic-breast-cancer-demo"
+}

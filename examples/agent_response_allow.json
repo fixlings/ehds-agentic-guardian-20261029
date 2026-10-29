@@ -1,0 +1,103 @@
+{
+  "session_id": "11111111-1111-1111-1111-111111111111",
+  "decision": "allow",
+  "policy": {
+    "outcome": "allow",
+    "rule_id": "allow.public_health",
+    "reason_code": "allowed_public_health",
+    "purpose_category": "public_health_research",
+    "purpose_changed": false,
+    "role": "public_health_researcher",
+    "evidence": [
+      "stated purpose is public-health surveillance"
+    ],
+    "article_mapping": {
+      "status": "unresolved",
+      "citation": null,
+      "source_url": null
+    },
+    "authoritative": true
+  },
+  "interpretation": {
+    "proposed_purpose": "public_health_research",
+    "purpose_change_suspected": false,
+    "identity_disclosure_suspected": false,
+    "injection_suspected": false,
+    "needs_clarification": false,
+    "clarification_question": null,
+    "unresolved_terms": [],
+    "query": {
+      "dataset_id": "synthetic-breast-cancer-demo",
+      "measures": [
+        "count"
+      ],
+      "group_by": [
+        "bmi_band"
+      ],
+      "filters": {
+        "sex": "female",
+        "age_bands": [
+          "50-59",
+          "60-69",
+          "70+"
+        ],
+        "bmi_bands": [
+          "obese"
+        ],
+        "exclude_bmi_bands": [],
+        "breast_cancer": true,
+        "coded": [
+          {
+            "system": "ICD-10",
+            "code": "C50",
+            "display": "Malignant neoplasm of breast",
+            "source_text": "breast cancer",
+            "negated": false
+          }
+        ],
+        "regions": [],
+        "timing": []
+      },
+      "user_claim": "obesity causes breast cancer"
+    },
+    "notes": []
+  },
+  "evidence": {
+    "supported_conclusions": [
+      "Synthetic counts are available for this aggregate."
+    ],
+    "unsupported_claims": [
+      "An association between elevated BMI and breast cancer in this synthetic dataset does not establish that BMI preceded the diagnosis or caused the cancer. Temporal order is incomplete when measurement timing is unknown or falls after diagnosis."
+    ],
+    "missing_evidence": [
+      "Measurement time is missing or after diagnosis for part of the cohort."
+    ],
+    "temporal_feasibility": "insufficient",
+    "association_supported": true,
+    "causation_supported": false,
+    "checks_performed": [
+      {
+        "name": "describe_dataset",
+        "ok": true,
+        "detail": "field list loaded"
+      },
+      {
+        "name": "execute_aggregate",
+        "ok": true,
+        "detail": "mock executor"
+      }
+    ],
+    "tool_steps_used": 2
+  },
+  "aggregate": null,
+  "explanation": "An association between elevated BMI and breast cancer in this synthetic dataset does not establish that BMI preceded the diagnosis or caused the cancer. Temporal order is incomplete when measurement timing is unknown or falls after diagnosis.",
+  "audit_id": "audit-example-1",
+  "limitations": [
+    "Synthetic fixture. Not a real cancer registry. Article mapping is unresolved."
+  ],
+  "model": "mistral-small-2603",
+  "tool_steps": 2,
+  "latency_ms": 10,
+  "synthetic": true,
+  "live_model": false
+}

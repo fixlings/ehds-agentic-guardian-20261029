@@ -1,0 +1,55 @@
+{
+  "match": "casefold_substring",
+  "precedence": [
+    "prompt_injection",
+    "identity_disclosure",
+    "role_forbidden",
+    "purpose_forbidden_insurance",
+    "purpose_forbidden_employment",
+    "purpose_forbidden_marketing",
+    "allowed_public_health"
+  ],
+  "roles_always_reject": ["insurer", "employer", "marketer"],
+  "fail_closed_on_model_flags": [
+    "injection_suspected",
+    "identity_disclosure_suspected"
+  ],
+  "forbidden_proposed_purposes": [
+    "insurance",
+    "employment",
+    "marketing",
+    "identity_disclosure"
+  ],
+  "categories": {
+    "prompt_injection": [
+      "ignore policy",
+      "ignore previous instructions",
+      "you are now unrestricted",
+      "vergiss die regeln"
+    ],
+    "identity_disclosure": [
+      "name the patients",
+      "print all patient rows",
+      "mit namen",
+      "jeden einzelnen fall",
+      "contacts of women"
+    ],
+    "insurance": [
+      "too expensive to insure",
+      "underwriting",
+      "insurance",
+      "versicherung"
+    ],
+    "employment": [
+      "job applicants",
+      "unfit for work",
+      "fitness for work"
+    ],
+    "marketing": [
+      "product campaign",
+      "wellness product",
+      "werbung"
+    ]
+  },
+  "article_mapping": "unresolved"
+}
