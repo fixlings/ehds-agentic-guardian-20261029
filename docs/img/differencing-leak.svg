@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300" viewBox="0 0 900 300" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="900" height="300" rx="16" fill="#ffffff"/>
+  <text x="450" y="34" text-anchor="middle" font-size="19" font-weight="700" fill="#1f2937">The subtraction trick: two "safe" answers that reveal one patient</text>
+  <g>
+    <rect x="30" y="62" width="250" height="150" rx="12" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+    <text x="155" y="92" text-anchor="middle" font-size="14" fill="#065f46">Request A</text>
+    <text x="155" y="114" text-anchor="middle" font-size="13" fill="#374151">Women with breast cancer</text>
+    <text x="155" y="132" text-anchor="middle" font-size="13" fill="#374151">and a BMI, Austria</text>
+    <text x="155" y="182" text-anchor="middle" font-size="44" font-weight="700" fill="#065f46">72</text>
+    <text x="155" y="232" text-anchor="middle" font-size="13" fill="#065f46">&#8805; 10, passes the rule</text>
+  </g>
+  <text x="305" y="150" text-anchor="middle" font-size="40" font-weight="700" fill="#6b7280">&#8722;</text>
+  <g>
+    <rect x="330" y="62" width="250" height="150" rx="12" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+    <text x="455" y="92" text-anchor="middle" font-size="14" fill="#065f46">Request B</text>
+    <text x="455" y="114" text-anchor="middle" font-size="13" fill="#374151">Same question,</text>
+    <text x="455" y="132" text-anchor="middle" font-size="13" fill="#374151">Austria without Burgenland</text>
+    <text x="455" y="182" text-anchor="middle" font-size="44" font-weight="700" fill="#065f46">71</text>
+    <text x="455" y="232" text-anchor="middle" font-size="13" fill="#065f46">&#8805; 10, passes the rule</text>
+  </g>
+  <text x="605" y="150" text-anchor="middle" font-size="40" font-weight="700" fill="#6b7280">=</text>
+  <g>
+    <rect x="630" y="62" width="240" height="150" rx="12" fill="#fef2f2" stroke="#ef4444" stroke-width="2"/>
+    <text x="750" y="92" text-anchor="middle" font-size="14" fill="#991b1b">What anyone can compute</text>
+    <text x="750" y="114" text-anchor="middle" font-size="13" fill="#374151">Women with breast cancer</text>
+    <text x="750" y="132" text-anchor="middle" font-size="13" fill="#374151">in Burgenland</text>
+    <text x="750" y="182" text-anchor="middle" font-size="44" font-weight="700" fill="#b91c1c">1</text>
+    <text x="750" y="232" text-anchor="middle" font-size="13" fill="#991b1b">one identifiable patient</text>
+  </g>
+  <rect x="30" y="252" width="840" height="36" rx="8" fill="#eff6ff"/>
+  <text x="450" y="276" text-anchor="middle" font-size="14" fill="#1e3a8a"><tspan font-weight="700">Guardian:</tspan> remembers the patients behind A, sees that B differs by fewer than 10, and holds B back.</text>
+</svg>
