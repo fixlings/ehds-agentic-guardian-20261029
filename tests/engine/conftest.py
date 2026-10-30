@@ -5,7 +5,7 @@ from pytest_socket import disable_socket, enable_socket
 @pytest.fixture(autouse=True)
 def _no_network():
     """Engine tests run with the network blocked: patient data never needs a socket."""
-    disable_socket()
+    disable_socket(allow_unix_socket=True)
     yield
     enable_socket()
 

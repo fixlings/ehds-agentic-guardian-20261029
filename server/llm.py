@@ -1,7 +1,7 @@
-"""Optional OpenRouter chat client (EHDS_LLM_PROVIDER=openrouter).
+"""OpenRouter client for the AI request check (ehds/ai_check.py).
 
-Same ChatClient interface as MistralEuClient. OpenRouter is NOT EU-only; only the
-chat question, stated purpose and role are sent, never patient data. Requests ask
+The only module that talks to a model. OpenRouter is NOT EU-only; only request text is
+sent, never patient data. Requests ask
 OpenRouter to route only to providers that do not store or train on prompts.
 """
 
@@ -13,12 +13,10 @@ from typing import Any
 
 import httpx
 
-from guardian.contracts.budget import (
-    MAX_MODEL_RETRIES,
-    MODEL_TIMEOUT_S,
-    OPENROUTER_BASE_URL,
-    OPENROUTER_DEFAULT_MODEL,
-)
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENROUTER_DEFAULT_MODEL = "mistralai/mistral-small-3.2-24b-instruct"
+MAX_MODEL_RETRIES = 1
+MODEL_TIMEOUT_S = 20.0
 
 
 class OpenRouterClient:

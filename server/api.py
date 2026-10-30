@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict
 from ehds import ai_check, audit, explain, workspace
 from ehds.pipeline import handle
 
-REQUESTS_DIR = Path(__file__).resolve().parents[2] / "requests"
+REQUESTS_DIR = Path(__file__).resolve().parents[1] / "requests"
 REQUIRED = ("purpose", "question", "requested_as")
 MAX_SPE_ROWS = 20
 

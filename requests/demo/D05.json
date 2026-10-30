@@ -1,0 +1,16 @@
+{
+  "id": "D05",
+  "submitted": "2026-10-30T12:00:00+01:00",
+  "applicant": {
+    "name": "Demo",
+    "organisation": "FitLife Apps GmbH",
+    "country": "AT"
+  },
+  "requested_as": "health data request",
+  "requested_format": "anonymised statistics",
+  "purpose": "Scientific research on how physical activity relates to type 2 diabetes.",
+  "question": "How many patients have type 2 diabetes, by region, so we know where to launch our premium coaching subscription first?",
+  "definitions": [
+    "Type 2 diabetes = ICD-10 code starting with E11."
+  ]
+}

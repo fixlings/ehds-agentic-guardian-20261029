@@ -85,3 +85,46 @@ def test_model_outage_falls_back_to_rules():
             raise TimeoutError
     out = handle(json.loads((ROOT / "requests" / "R01.json").read_text()), create_workspace=False, ai_client=Broken())
     assert out["decision"] == "APPROVE_STATISTICAL" and out["ai_check"]["status"] == "unavailable"
+
+
+def _checks(**risks):
+    return {k: {"risk": r[0], "finding": "Finding.", "quote": r[1]} for k, r in risks.items()}
+
+
+def _ok(**kw):
+    return dict({"prohibited": False, "category": "none", "allowed_purpose": "scientific_research"}, **kw)
+
+
+def test_payload_has_whole_request_but_no_ids_or_names():
+    req = json.loads((ROOT / "requests" / "R05.json").read_text())
+    p = ai_check.payload(req)
+    assert p["definitions"] == req["definitions"] and p["organisation"]
+    assert "id" not in p and "submitted" not in p and req["applicant"]["name"] not in json.dumps(p)
+
+
+def test_reidentification_with_quote_rejects():
+    req = dict(BASE, purpose="Research on diabetes care.", question="How many patients with diabetes live at Hauptstrasse 5, by sex?")
+    ai = ai_check.review(req, FakeModel(_ok(checks=_checks(reidentification_risk=("high", "live at Hauptstrasse 5")))))
+    d = ai_check.apply(decide(req), ai, req)
+    assert d.decision == "REJECT" and d.articles == ["54"]
+
+
+def test_purpose_mismatch_with_quote_rejects_art53():
+    req = dict(BASE, purpose="Research on diabetes care.", question="How many have diabetes, by region, to pick where to open our gym?")
+    ai = ai_check.review(req, FakeModel(_ok(checks=_checks(purpose_fits_question=("high", "to pick where to open our gym")))))
+    d = ai_check.apply(decide(req), ai, req)
+    assert d.decision == "REJECT" and d.articles == ["53"]
+
+
+def test_high_risk_without_quote_and_medium_only_flag():
+    req = dict(BASE, purpose="Research on regional diabetes care.")
+    ai = ai_check.review(req, FakeModel(_ok(checks=_checks(reidentification_risk=("high", "invented"),
+                                                            data_minimisation=("medium", "by region")))))
+    d = ai_check.apply(decide(req), ai, req)
+    assert d.decision == "APPROVE_STATISTICAL" and sum("AI check," in f for f in d.flags) == 2
+
+
+def test_excess_data_downgrades_records():
+    req = dict(BASE, requested_as="health data access application", purpose="Research on diabetes care. Aggregates are not enough.")
+    ai = ai_check.review(req, FakeModel(_ok(records_justified=True, checks=_checks(data_minimisation=("high", "Aggregates are not enough")))))
+    assert ai_check.apply(decide(req), ai, req).decision == "APPROVE_STATISTICAL"

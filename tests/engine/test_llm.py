@@ -3,8 +3,7 @@ import json
 import httpx
 import pytest
 
-from guardian.contracts.budget import OPENROUTER_BASE_URL, OPENROUTER_DEFAULT_MODEL
-from guardian.nlp.openrouter_client import OpenRouterClient
+from server.llm import OPENROUTER_BASE_URL, OPENROUTER_DEFAULT_MODEL, OpenRouterClient
 
 
 def _transport(seen):

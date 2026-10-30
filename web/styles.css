@@ -227,3 +227,9 @@ textarea:focus, input:focus, select:focus { border-color: #60a1ef; box-shadow: 0
 .staff-steps li.ok { color: #076a53; }
 .audit-row { font-size: 11px; font-family: ui-monospace, Menlo, Consolas, monospace; color: #5e708d; margin: 3px 0; overflow-wrap: anywhere; }
 pre.sql { white-space: pre-wrap; font-size: 11px; background: #f1f6fd; padding: 10px; border-radius: 8px; overflow-x: auto; }
+
+.ai-checks { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; font-size: 0.9rem; }
+.ai-checks li { padding: 4px 8px; border-radius: 6px; background: #f3f7fb; }
+.ai-checks li.risk-medium { background: #fff6e0; }
+.ai-checks li.risk-high { background: #fde8e8; }
+.ai-checks em { color: #555; }

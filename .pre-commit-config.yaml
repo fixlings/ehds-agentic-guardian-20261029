@@ -7,7 +7,7 @@ repos:
     rev: v0.8.4
     hooks:
       - id: ruff
-        files: ^(ehds/|tests/engine/|guardian/evidence/(track3_executor|routing)\.py|guardian/api/requests_api\.py|tests/(evidence/test_track3_executor|integration/test_track3_api)\.py)
+        files: ^(ehds/|server/|tests/|navigator_app\.py)
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:

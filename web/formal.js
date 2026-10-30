@@ -159,7 +159,18 @@
     c.append(el("p", "", ai.prohibited ? `Forbidden use found: ${ai.category.replaceAll("_", " ")}.` : `No forbidden use found. Purpose: ${ai.allowed_purpose.replaceAll("_", " ")}.`));
     if (ai.quote) c.append(el("p", "", `Quote: "${ai.quote}" ${ai.quote_verified ? "(found in the request)" : "(not found in the request, ignored)"}`));
     if (ai.reason) c.append(el("p", "", ai.reason));
-    c.append(el("p", "form-note", `Model: ${ai.model}. It only saw the request text, never patient data.`));
+    if (ai.checks && ai.checks.length) {
+      const ul = el("ul", "ai-checks");
+      ai.checks.forEach((k) => {
+        const li = el("li", `risk-${k.risk}`, `${k.risk === "low" ? "✓" : "!"} ${k.label} `);
+        li.append(el("strong", "", k.risk));
+        if (k.finding) li.append(el("span", "", ` · ${k.finding}`));
+        if (k.quote && k.risk !== "low") li.append(el("em", "", ` "${k.quote}"${k.quote_verified ? "" : " (not in the request, ignored)"}`));
+        ul.append(li);
+      });
+      c.append(ul);
+    }
+    c.append(el("p", "form-note", `Model: ${ai.model}. It only saw the request, never patient data. A finding changes the decision only if its quote is in the request.`));
     return c;
   }
 

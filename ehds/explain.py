@@ -79,6 +79,11 @@ def decision_steps(req: dict, out: dict) -> list[dict]:
         verdict = f"forbidden: {ai['category']}" if ai["prohibited"] else f"purpose: {ai['allowed_purpose']}"
         steps.append({"check": f"AI check ({ai['model']})", "ok": not ai["prohibited"],
                       "result": f"{verdict}. {ai['reason']}", "evidence": f'"{ai["quote"]}"' if ai["quote"] else ""})
+        for c in ai.get("checks", []):
+            if c["risk"] != "low":
+                steps.append({"check": f"AI: {c['label']}", "ok": False, "result": f"{c['risk']} risk. {c['finding']}",
+                              "evidence": f'"{c["quote"]}"' + ("" if c["quote_verified"] else " (not in the request, ignored)")
+                              if c["quote"] else ""})
     else:
         steps.append({"check": "AI check", "ok": True, "result": ai.get("status", "off") + ": rules decide alone", "evidence": ""})
     hits = judge.prohibited_hits(text)

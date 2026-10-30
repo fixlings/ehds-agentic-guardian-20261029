@@ -82,8 +82,8 @@ INJECTION = re.compile(
 
 ALLOWED_PURPOSE_HINTS = [
     (r"\bresearch\w*|\bstud(?:y|ies)\b|\bepidemiolog\w*", "scientific research (Art. 53)"),
-    (r"\bpublic health\b|\bprevention\b|\bquality programme|\bimprov\w* (?:care|quality)", "public health and improving care (Art. 53)"),
-    (r"\bpolic(?:y|ies)\b|\bplanning\b|\bplan\b", "policy-making and planning (Art. 53)"),
+    (r"\bpublic health\b|\bprevention\b|\bquality programme|\bimprov\w* (?:care|quality)|\bsurveillance\b|\bhealth (?:authority|ministry|service)", "public health and improving care (Art. 53)"),
+    (r"\bpolic(?:y|ies)\b|\bplan(?:s|ning|ned)?\b|\bcapacity\b", "policy-making and planning (Art. 53)"),
     (r"\bofficial statistics\b|\bstatistics office|\bannual (?:health )?report", "official statistics (Art. 53)"),
     (r"\bteaching\b|\beducation\b|\bmodule\b", "education and teaching (Art. 53)"),
     (r"\btrain\w*|\bvalidat\w*|\balgorithm\w*|\bmodel\b|\bprediction\b", "training and testing algorithms (Art. 53)"),

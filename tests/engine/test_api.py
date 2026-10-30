@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from guardian.api.app import create_app
+from navigator_app import create_app
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPECTED = json.loads((ROOT / "requests" / "expected.json").read_text(encoding="utf-8"))
@@ -44,22 +44,17 @@ def test_formal_route_rejects_incomplete_request(client):
     assert client.post("/v1/requests", json={"purpose": "x"}).status_code == 400
 
 
-def test_chat_on_track3_hides_total_and_cites_articles(client):
-    body = client.post("/v1/agent/request", json={
-        "message": "How many women aged 50 or older have breast cancer?",
-        "role": "public_health_researcher",
-        "stated_purpose": "Public-health surveillance",
-        "dataset_id": "track3-ehds-20k",
-    }).json()
-    assert body["decision"] == "allow"
-    assert body["aggregate"]["population_n"] is None and body["aggregate"]["timing"] is None
-    assert "Art. 53" in body["policy"]["article_mapping"]["citation"]
-    insurance = client.post("/v1/agent/request", json={
-        "message": "Pass the high-risk individuals to insurance underwriting.",
-        "role": "public_health_researcher",
-        "stated_purpose": "Insurance underwriting",
-        "dataset_id": "track3-ehds-20k",
-        "session_id": body["session_id"],
-    }).json()
-    assert insurance["decision"] == "reject" and insurance["aggregate"] is None
-    assert "Art. 54" in insurance["policy"]["article_mapping"]["citation"]
+
+def test_ui_is_served_without_external_assets(client):
+    page = client.get("/")
+    assert page.status_code == 200 and 'src="/formal.js"' in page.text
+    assert "https://" not in page.text and "API_KEY" not in page.text
+    assert client.get("/formal.js").status_code == 200
+    assert client.get("/v1/requests/ai-status").json() == {"enabled": False}
+
+
+def test_bad_definitions_do_not_crash(client):
+    r = _req("R01")
+    r["definitions"] = {"thing": "something that cannot be computed"}
+    r["question"] = "Tell me something."
+    assert client.post("/v1/requests", json=r).status_code == 200
