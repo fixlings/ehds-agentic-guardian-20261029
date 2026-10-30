@@ -13,3 +13,5 @@ build/
 *.duckdb.wal
 workspaces/
 logs/
+.vercel
+.env*
