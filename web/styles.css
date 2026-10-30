@@ -311,6 +311,11 @@ pre.sql { white-space: pre-wrap; font-size: 11px; background: #f1f6fd; padding: 
 .s-appeal { color: #a52234; font-weight: 800; white-space: nowrap; }
 .s-row:has(.s-appeal) { background: #fff4f5; }
 .appeal-text { width: 100%; box-sizing: border-box; border: 1px solid #d5e2f1; border-radius: 8px; padding: 10px 12px; font: inherit; margin: 6px 0 10px; }
+.review-actions { display: flex; gap: 10px; }
+.danger-button { border-radius: 9px; padding: 13px 19px; min-height: 46px; background: #fff; color: #a52234; border: 1px solid #a52234; font-size: 14px; font-weight: 760; }
+.danger-button:hover { background: #fff4f5; }
+.review-ok { color: #11693b; font-weight: 800; }
+.review-no { color: #a52234; font-weight: 800; }
 .s-flag { color: #93610a; font-weight: 750; white-space: nowrap; }
 .pill { display: inline-block; border-radius: 999px; padding: 4px 9px; font-size: 11px; font-weight: 800; white-space: nowrap; background: #e9f6f0; color: #076a53; }
 .pill-REJECT { background: #ffe8eb; color: #a52234; }

@@ -57,7 +57,15 @@ def submit(req: dict) -> JSONResponse:
     req = dict(req)
     req.setdefault("id", f"WEB-{uuid.uuid4().hex[:8]}")
     req.setdefault("applicant", {"organisation": "Web applicant", "country": "AT"})
-    out = handle(req)
+    out = _finish(req, handle(req))
+    out["seq"] = len(HISTORY) + 1
+    enc = jsonable_encoder(out)
+    HISTORY.append({"seq": out["seq"], "received": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "request": jsonable_encoder(req), "result": enc})
+    return JSONResponse(enc)
+
+
+def _finish(req: dict, out: dict) -> dict:
     staff = out.get("staff", {})
     staff.pop("raw_counts_staff_only", None)
     staff["steps"] = explain.decision_steps(req, out)
@@ -65,11 +73,7 @@ def submit(req: dict) -> JSONResponse:
         staff["recipe_summary"] = explain.recipe_summary(staff["recipe"])
     is_stat = out.get("decision") == "APPROVE_STATISTICAL" and out.get("answer")
     out["privacy"] = explain.privacy_summary(out["answer"]) if is_stat else None
-    out["seq"] = len(HISTORY) + 1
-    enc = jsonable_encoder(out)
-    HISTORY.append({"seq": out["seq"], "received": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                    "request": jsonable_encoder(req), "result": enc})
-    return JSONResponse(enc)
+    return out
 
 
 def _summary(e: dict) -> dict:
@@ -81,7 +85,8 @@ def _summary(e: dict) -> dict:
             "organisation": (req.get("applicant") or {}).get("organisation", ""),
             "country": (req.get("applicant") or {}).get("country", ""),
             "purpose": str(req.get("purpose", ""))[:240], "asked": "Records" if records else "Statistics",
-            "decision": out.get("decision"), "flags": len(flags), "appeal": bool(e.get("appeal"))}
+            "decision": (e.get("review") or {}).get("result", out).get("decision"), "flags": len(flags),
+            "appeal": bool(e.get("appeal")), "review": (e.get("review") or {}).get("outcome")}
 
 
 class AppealBody(BaseModel):
@@ -100,8 +105,38 @@ def appeal(seq: int, body: AppealBody) -> dict:
         raise HTTPException(409, "Manual review was already requested.")
     e["appeal"] = {"comment": body.comment.strip()[:2000],
                    "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    memory.mark(e["request"], review="pending")
     audit.log("manual_review_requested", request=e["result"].get("id"), seq=seq)
     return {"status": "requested", "seq": seq}
+
+
+class ReviewBody(BaseModel):
+    outcome: str
+    note: str = ""
+
+
+@router.post("/staff/requests/{seq}/review")
+def staff_review(seq: int, body: ReviewBody) -> dict:
+    """Staff decide a manual review: allow the request (still privacy-protected) or keep the rejection."""
+    if not 1 <= seq <= len(HISTORY):
+        raise HTTPException(404, "Unknown request.")
+    e = HISTORY[seq - 1]
+    if not e.get("appeal"):
+        raise HTTPException(409, "The applicant did not request a manual review.")
+    if e.get("review"):
+        raise HTTPException(409, "This review was already decided.")
+    if body.outcome not in ("allow", "reject"):
+        raise HTTPException(400, "Outcome must be 'allow' or 'reject'.")
+    note = body.note.strip()[:2000]
+    rev = {"outcome": body.outcome, "note": note, "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    if body.outcome == "allow":
+        out = _finish(e["request"], handle(e["request"], staff_note=note))
+        out["seq"] = seq
+        rev["result"] = jsonable_encoder(out)
+    memory.mark(e["request"], review="allowed" if body.outcome == "allow" else "rejected", review_note=note)
+    e["review"] = rev
+    audit.log("manual_review_decided", request=e["result"].get("id"), seq=seq, outcome=body.outcome)
+    return rev
 
 
 @router.get("/requests/history")

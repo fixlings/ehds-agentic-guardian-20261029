@@ -16,7 +16,7 @@
   };
   const LABELS = { REJECT: "Rejected", APPROVE_STATISTICAL: "Approved: statistics", APPROVE_SPE: "Approved: secure workspace" };
   let samples = [];
-  let last = null;
+  let last = null, lastReq = null;
 
   function table(headers, rows) {
     const t = el("table", "result-table");
@@ -47,6 +47,9 @@
     return { status: res.status, body: await res.json().catch(() => ({})) };
   }
 
+  const REVIEW = { pending: "Manual review requested", allowed: "Allowed after manual review", rejected: "Rejection confirmed after review" };
+  const REVIEW_APPLICANT = { pending: "manual review pending", allowed: "allowed after manual review", rejected: "rejection confirmed after manual review" };
+
   function released(h) {
     const r = h.released;
     if (!r) return h.decision === "APPROVE_SPE" ? "Secure workspace" : "—";
@@ -60,17 +63,25 @@
     const c = card(title);
     if (!list.length) { c.append(el("p", "form-note", empty)); return c; }
     c.append(table(["Request", "Question", "Decision", "Numbers received"],
-      list.map((h) => [h.id, h.question || h.purpose, LABELS[h.decision] || h.decision, released(h)])));
+      list.map((h) => [h.id, h.question || h.purpose,
+        `${LABELS[h.decision] || h.decision}${h.review ? ` (${REVIEW_APPLICANT[h.review]})` : ""}${h.review_note ? `. Staff note: ${h.review_note.replace(/[.\s]+$/, "")}` : ""}`, released(h)])));
     return c;
   }
 
   async function showHistory(req, id) {
     const org = req.applicant?.organisation;
     if (!org) return;
-    const list = (await (await fetch(`/v1/requests/history?organisation=${encodeURIComponent(org)}`)).json()).filter((h) => h.id !== id);
-    const c = historyCard(list, "Your organisation's earlier requests", "This is your organisation's first request.");
+    const all = await (await fetch(`/v1/requests/history?organisation=${encodeURIComponent(org)}`)).json();
+    const cur = all.find((h) => h.id === id);
+    const c = historyCard(all.map((h) => (h.id === id ? { ...h, id: `${h.id} (this one)` } : h)), "Your organisation's request history", "No requests yet.");
+    c.id = "hist-card";
+    if (cur && cur.review) c.prepend(el("p", cur.review === "allowed" ? "review-ok" : cur.review === "rejected" ? "review-no" : "form-note", `This request: ${REVIEW_APPLICANT[cur.review]}${cur.review_note ? `. Staff note: ${cur.review_note.replace(/[.\s]+$/, "")}` : ""}.`));
     c.append(el("p", "form-note", "Every new answer is compared with these. A number that would reveal fewer than 10 people when subtracted from an earlier one is held back."));
-    $("formal-body").append(c);
+    const refresh = el("button", "text-button", "Refresh status"); refresh.type = "button";
+    refresh.onclick = () => showHistory(req, id);
+    c.append(refresh);
+    const old = $("hist-card");
+    if (old) old.replaceWith(c); else $("formal-body").append(c);
   }
 
   function appealCard(seq) {
@@ -83,7 +94,7 @@
     b.onclick = async () => {
       b.disabled = true;
       const r = await post(`/v1/requests/${seq}/appeal`, { comment: t.value });
-      if (r.status === 200) { t.remove(); b.remove(); msg.textContent = "Sent. A staff member will review your request and contact you."; }
+      if (r.status === 200) { t.remove(); b.remove(); msg.textContent = "Sent. A staff member will review your request. Use \"Refresh status\" below to see the outcome."; if (last) showHistory(lastReq, last.id); }
       else { b.disabled = false; msg.textContent = r.body.detail || `Error ${r.status}`; }
     };
     c.append(t, b, msg);
@@ -188,8 +199,8 @@
     return c;
   }
 
-  function decisionCard(out) {
-    const c = card("Decision");
+  function decisionCard(out, title = "Decision") {
+    const c = card(title);
     const top = el("div", "dec-top"); top.append(pill(out.decision), el("span", "form-note", `EHDS Art. ${(out.articles || []).join(", ")}`));
     c.append(top, el("p", "", out.reason), el("p", "form-note", `Letter sent: ${out.applicant_letter}`));
     if (out.answer && out.answer.error) c.append(el("p", "ws-blocked", out.answer.error));
@@ -199,16 +210,37 @@
     return c;
   }
 
-  function renderStaff(out, req, received, appeal) {
+  function reviewCard(out, appeal, review) {
+    const a = card(review ? "Manual review: decided" : "Manual review requested by the applicant", !review);
+    a.append(el("p", "", appeal.comment ? `Applicant: “${appeal.comment}”` : "Applicant gave no comment."), el("p", "form-note", `Requested ${new Date(appeal.at).toLocaleString()}.`));
+    if (review) {
+      a.append(el("p", review.outcome === "allow" ? "review-ok" : "review-no", review.outcome === "allow" ? "Allowed by staff." : "Rejection confirmed by staff."));
+      a.append(el("p", "form-note", `${review.note ? `Note: ${review.note} · ` : ""}${new Date(review.at).toLocaleString()}`));
+      return a;
+    }
+    const t = el("textarea", "appeal-text"); t.rows = 2; t.placeholder = "Note for the record (sent to the applicant's history).";
+    t.setAttribute("aria-label", "Staff note");
+    const row = el("div", "review-actions"), msg = el("p", "form-note");
+    [["allow", "Allow request", "primary-button"], ["reject", "Keep rejection", "danger-button"]].forEach(([o, label, cls]) => {
+      const b = el("button", cls, label); b.type = "button";
+      b.onclick = async () => {
+        row.querySelectorAll("button").forEach((x) => { x.disabled = true; });
+        const r = await post(`/v1/staff/requests/${out.seq}/review`, { outcome: o, note: t.value });
+        if (r.status === 200) { await openStaff(out.seq); loadStaff(); } else { msg.textContent = r.body.detail || `Error ${r.status}`; row.querySelectorAll("button").forEach((x) => { x.disabled = false; }); }
+      };
+      row.append(b);
+    });
+    a.append(el("p", "form-note", "Allowing still applies every privacy protection: small groups stay hidden and subtraction tricks stay blocked."), t, row, msg);
+    return a;
+  }
+
+  function renderStaff(out, req, received, appeal, review) {
     const body = $("staff-body");
     body.replaceChildren();
     const s = out.staff || {};
-    if (appeal) {
-      const a = card("Manual review requested by the applicant", true);
-      a.append(el("p", "", appeal.comment ? `“${appeal.comment}”` : "No comment given."), el("p", "form-note", `Requested ${new Date(appeal.at).toLocaleString()}.`));
-      body.append(a);
-    }
-    body.append(requestCard(req || {}, received), decisionCard(out));
+    if (appeal) body.append(reviewCard(out, appeal, review));
+    if (review && review.result) body.append(decisionCard(review.result, "Decision after manual review"));
+    body.append(requestCard(req || {}, received), decisionCard(out, review ? "Original automated decision" : "Decision"));
     const steps = card("How the decision was made");
     const ol = el("ol", "staff-steps");
     (s.steps || []).forEach((st) => {
@@ -261,7 +293,7 @@
     const q = $("s-search").value.toLowerCase().trim();
     const dec = $("s-decision").value, kind = $("s-kind").value, rev = $("s-review").checked, app = $("s-appeal").checked;
     const rows = staffRows.filter((r) => (!q || `${r.id} ${r.organisation} ${r.purpose}`.toLowerCase().includes(q))
-      && (!dec || r.decision === dec) && (!kind || r.asked === kind) && (!rev || r.flags > 0 || r.appeal) && (!app || r.appeal));
+      && (!dec || r.decision === dec) && (!kind || r.asked === kind) && (!rev || r.flags > 0 || (r.appeal && !r.review)) && (!app || r.appeal));
     $("s-count").textContent = `${rows.length} of ${staffRows.length} requests`;
     const tb = $("s-rows");
     tb.replaceChildren();
@@ -272,7 +304,7 @@
       const org = el("td"); org.append(el("b", "", r.organisation || "—"), el("small", "", r.purpose));
       const d = el("td"); d.append(pill(r.decision));
       tr.append(el("td", "", new Date(r.received).toLocaleTimeString()), el("td", "s-id", r.id), org, el("td", "", r.asked), d,
-        el("td", r.appeal ? "s-appeal" : r.flags ? "s-flag" : "", [r.appeal ? "Manual review requested" : "", r.flags ? `${r.flags} flag${r.flags > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ") || "—"));
+        el("td", r.appeal && !r.review ? "s-appeal" : r.flags ? "s-flag" : "", [r.appeal ? REVIEW[{ allow: "allowed", reject: "rejected" }[r.review] || "pending"] : "", r.flags ? `${r.flags} flag${r.flags > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ") || "—"));
       tb.append(tr);
     });
     $("s-empty").hidden = rows.length > 0;
@@ -280,7 +312,7 @@
 
   async function openStaff(seq) {
     const e = await (await fetch(`/v1/staff/requests/${seq}`)).json();
-    renderStaff(e.result, e.request, e.received, e.appeal);
+    renderStaff(e.result, e.request, e.received, e.appeal, e.review);
     showView("staff");
     $("staff-list").hidden = true;
     $("staff-detail").hidden = false;
@@ -310,6 +342,7 @@
     const open = el("button", "text-button", "Review it on the Staff desk →"); open.type = "button";
     open.onclick = () => openStaff(last.seq);
     note.append(open);
+    lastReq = req;
     renderApplicant(last, req);
     showHistory(req, last.id);
   }

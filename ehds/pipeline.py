@@ -5,14 +5,28 @@ from __future__ import annotations
 import time
 
 from . import ai_check, audit, certificate, engine, evidence, memory, privacy, recipe, reference, workspace
-from .judge import decide
+from .judge import Decision, decide
 
 
-def handle(req: dict, create_workspace: bool = True, ai_client=None) -> dict:
+def _staff_approval(req: dict, d: Decision, note: str) -> Decision:
+    """A staff member overrules a rejection after manual review. Privacy protection still applies in full."""
+    records = str(req.get("requested_as", "")).lower().startswith("health data access")
+    text = ("After manual review by staff, your request is approved. "
+            + ("The selected pseudonymised records are available in a secure processing environment; they cannot be "
+               "downloaded." if records else "You receive anonymised statistics. Groups with fewer than 10 patients "
+                                             "are shown as '<10' to protect privacy."))
+    return Decision("APPROVE_SPE" if records else "APPROVE_STATISTICAL", ["53", "68", "73"] if records else ["53", "69"],
+                    f"Approved by staff after manual review: {note or 'no note given'}", text, d.matched,
+                    d.flags + ["Staff decision after manual review: the automated rejection was overruled."])
+
+
+def handle(req: dict, create_workspace: bool = True, ai_client=None, staff_note: str | None = None) -> dict:
     t0 = time.perf_counter()
     earlier = memory.history(req)
     ai = ai_check.review(req, ai_client, earlier)
     d = ai_check.apply(decide(req), ai, req)
+    if staff_note is not None:
+        d = _staff_approval(req, d, staff_note)
     granted = [h for h in earlier if h["decision"] != "REJECT"]
     if granted and d.decision == "REJECT" and "54" in d.articles:
         d.flags.append(f'Purpose change: this organisation was granted {granted[-1]["id"]} for "{granted[-1]["purpose"][:120]}", '

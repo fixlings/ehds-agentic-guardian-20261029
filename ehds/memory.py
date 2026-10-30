@@ -40,6 +40,14 @@ def for_organisation(org: str) -> list[dict]:
         return [dict(h) for h in _requests.get(applicant({"applicant": {"organisation": org}}), [])]
 
 
+def mark(req: dict, **fields) -> None:
+    """Add staff information (e.g. manual review status) to a request in the history."""
+    with _lock:
+        for h in _requests.get(applicant(req), []):
+            if h["id"] == req.get("id"):
+                h.update(fields)
+
+
 def remember_request(req: dict, decision: str, articles: list[str], released: dict | None = None,
                      held_back: list[str] | None = None) -> None:
     with _lock:

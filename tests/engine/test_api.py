@@ -136,3 +136,28 @@ def test_applicant_history_endpoint(client):
     hist = client.get("/v1/requests/history", params={"organisation": req["applicant"]["organisation"]}).json()
     assert hist[0]["id"] == "D10" and hist[0]["released"] == {"number_of_women_with_breast_cancer": 114}
     assert client.get("/v1/requests/history", params={"organisation": "Nobody"}).json() == []
+
+
+def test_staff_decide_manual_review(client):
+    from ehds import memory
+    from server import api
+
+    api.HISTORY.clear()
+    memory.reset()
+    allow = client.post("/v1/requests", json=_req("R02")).json()
+    keep = client.post("/v1/requests", json=_req("R04")).json()
+    assert client.post(f"/v1/staff/requests/{allow['seq']}/review", json={"outcome": "allow"}).status_code == 409
+    for r in (allow, keep):
+        client.post(f"/v1/requests/{r['seq']}/appeal", json={})
+    org = _req("R02")["applicant"]["organisation"]
+    assert client.get("/v1/requests/history", params={"organisation": org}).json()[-1]["review"] == "pending"
+    rev = client.post(f"/v1/staff/requests/{allow['seq']}/review", json={"outcome": "allow", "note": "Checked."}).json()
+    assert rev["result"]["decision"] == "APPROVE_STATISTICAL" and "error" not in rev["result"]["answer"]
+    assert "<10" in json.dumps(rev["result"]["answer"]) or rev["result"]["privacy"] is not None
+    assert client.post(f"/v1/staff/requests/{allow['seq']}/review", json={"outcome": "reject"}).status_code == 409
+    assert client.post(f"/v1/staff/requests/{keep['seq']}/review", json={"outcome": "reject"}).json()["outcome"] == "reject"
+    rows = {r["seq"]: r for r in client.get("/v1/staff/requests").json()}
+    assert rows[allow["seq"]]["decision"] == "APPROVE_STATISTICAL" and rows[allow["seq"]]["review"] == "allow"
+    assert rows[keep["seq"]]["decision"] == "REJECT" and rows[keep["seq"]]["review"] == "reject"
+    hist = {h["id"]: h for h in client.get("/v1/requests/history", params={"organisation": org}).json()}
+    assert hist["R02"]["review"] == "allowed" and hist["R02"]["decision"] == "APPROVE_STATISTICAL" and hist["R02"]["released"]
