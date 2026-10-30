@@ -31,6 +31,9 @@ def record_types(req: dict, rc: dict) -> dict:
     for table, pat in RECORD_WORDS.items():
         if re.search(pat, q, re.I):
             types[table] = None
+    for t in req.get("requested_records") or []:
+        if t in RECORD_WORDS:
+            types.setdefault(t, None)
     loincs = sorted({c["loinc"] for c in rc["concepts"].values()
                      if c["kind"] == "observation" and re.search(re.escape(c["name"]), q, re.I)})
     if loincs:
@@ -64,6 +67,23 @@ def create(permit: str, patient_ids: list[str], types: dict) -> dict:
     audit.log("workspace_created", permit=permit, patients=len(patient_ids), tables=copied)
     return {"permit": permit, "file": p.name, "patients": len(patient_ids), "rows": copied,
             "downloads": "blocked"}
+
+
+def info(permit: str) -> dict:
+    """Tables, columns and row counts of an open workspace (no data rows)."""
+    p = path(permit)
+    if not p.exists():
+        raise FileNotFoundError(permit)
+    con = duckdb.connect(str(p), read_only=True, config={"enable_external_access": False})
+    try:
+        tables = []
+        for (name,) in con.execute("SELECT table_name FROM information_schema.tables ORDER BY table_name").fetchall():
+            cols = [r[0] for r in con.execute(f'DESCRIBE "{name}"').fetchall()]
+            rows = con.execute(f'SELECT count(*) FROM "{name}"').fetchone()[0]
+            tables.append({"name": name, "columns": cols, "rows": rows})
+    finally:
+        con.close()
+    return {"permit": permit, "tables": tables, "downloads": "blocked"}
 
 
 def run_query(permit: str, sql: str):

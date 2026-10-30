@@ -58,3 +58,36 @@ def test_bad_definitions_do_not_crash(client):
     r["definitions"] = {"thing": "something that cannot be computed"}
     r["question"] = "Tell me something."
     assert client.post("/v1/requests", json=r).status_code == 200
+
+
+def test_staff_list_and_workspace_info(client):
+    from server import api
+
+    api.HISTORY.clear()
+    client.post("/v1/requests", json=_req("R01"))
+    client.post("/v1/requests", json=_req("R05"))
+    rows = client.get("/v1/staff/requests").json()
+    assert [r["id"] for r in rows] == ["R05", "R01"]
+    assert rows[0]["asked"] == "Records" and rows[0]["decision"] == "APPROVE_SPE"
+    detail = client.get(f"/v1/staff/requests/{rows[0]['seq']}").json()
+    assert detail["request"]["id"] == "R05" and detail["result"]["workspace"]["downloads"] == "blocked"
+    assert client.get("/v1/staff/requests/999").status_code == 404
+    info = client.get("/v1/workspaces/R05").json()
+    assert {t["name"] for t in info["tables"]} >= {"cohort", "conditions", "medications", "observations"}
+    assert client.get("/v1/workspaces/NOPE").status_code == 404
+
+
+def test_form_records_choice_opens_workspace_with_chosen_tables(client):
+    req = _req("R05")
+    req.update(id="F1", question="Pseudonymised data for adults with type 2 diabetes.", requested_records=["encounters"])
+    body = client.post("/v1/requests", json=req).json()
+    assert body["decision"] == "APPROVE_SPE"
+    assert set(body["workspace"]["rows"]) == {"encounters"}
+
+
+def test_records_request_without_cohort_opens_no_workspace(client):
+    req = _req("R05")
+    req.update(id="F2", purpose="We train a prediction model. Training needs individual-level histories; aggregates are not enough.",
+               question="Provide pseudonymised records.", definitions=["Report the size of the cohort you would make available."])
+    body = client.post("/v1/requests", json=req).json()
+    assert "workspace" not in body and "error" in body["answer"]

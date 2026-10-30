@@ -47,7 +47,7 @@
     return { status: res.status, body: await res.json().catch(() => ({})) };
   }
 
-  function renderApplicant(out) {
+  function renderApplicant(out, req = {}) {
     const section = $("formal-result");
     section.hidden = false;
     section.dataset.state = out.decision;
@@ -60,7 +60,8 @@
     letter.append(el("p", "", `Why: ${out.reason}`));
     body.append(letter);
     letter.append(el("p", "form-note", aiSummary(out.ai_check)));
-    if (out.answer && out.answer.error) { const e = card("No numbers", true); e.append(el("p", "", out.answer.error)); body.append(e); return; }
+    if (req.requested_as === "health data access application" && out.decision === "APPROVE_STATISTICAL") letter.append(el("p", "form-note", "You asked for records in a secure workspace. You receive statistics instead, because the request does not explain why statistics are not enough."));
+    if (out.answer && out.answer.error) { const e = card("Not processed", true); e.append(el("p", "", out.answer.error)); body.append(e); return; }
     if (out.decision === "APPROVE_STATISTICAL") {
       const c = card("Privacy-protected statistics");
       c.append(answerTable(out.answer));
@@ -69,32 +70,97 @@
       body.append(c);
       if (out.evidence) body.append(evidenceCard(out.evidence));
     }
-    if (out.decision === "APPROVE_SPE" && out.workspace) {
-      const c = card("Secure processing environment");
-      c.append(el("p", "", `Workspace opened for permit ${out.id} with ${out.patient_count} pseudonymised patients. Data types: ${Object.keys(out.record_types || {}).join(", ") || "—"}.`));
-      const q = el("textarea", "mono"); q.rows = 2; q.value = "SELECT count(DISTINCT patient_id) AS patients FROM cohort";
-      const run = el("button", "secondary-button", "Run query inside the workspace"); run.type = "button";
-      const dl = el("button", "text-button", "Try to download the data"); dl.type = "button";
-      const msg = el("div");
-      run.onclick = async () => {
-        const r = await post(`/v1/workspaces/${encodeURIComponent(out.id)}/query`, { sql: q.value });
-        msg.replaceChildren(r.status === 200 ? table(r.body.columns, r.body.rows) : el("p", "", `Blocked: ${r.body.detail}`));
-        if (r.status === 200) msg.append(el("p", "", r.body.note));
-      };
-      dl.onclick = async () => {
-        const r = await post(`/v1/workspaces/${encodeURIComponent(out.id)}/download`);
-        msg.replaceChildren(el("p", "", `HTTP ${r.status} · ${r.body.message}`));
-      };
-      c.append(q, run, dl, msg);
-      body.append(c);
+    if (out.decision === "APPROVE_SPE") {
+      if (out.workspace) body.append(workspacePanel(out));
+      else { const w = card("Secure workspace not opened", true); w.append(el("p", "", "The cohort could not be confirmed. A staff member will review the request.")); body.append(w); }
     }
   }
 
-  function renderStaff(out) {
+  const EXAMPLES = {
+    cohort: ["Count patients", "SELECT count(*) AS patients FROM cohort"],
+    conditions: ["Diagnoses", "SELECT icd10, count(DISTINCT patient_id) AS patients FROM conditions GROUP BY icd10 ORDER BY patients DESC"],
+    medications: ["Medicines", "SELECT atc, name, count(DISTINCT patient_id) AS patients FROM medications GROUP BY atc, name ORDER BY patients DESC"],
+    observations: ["Lab values", "SELECT loinc, name, round(avg(value), 2) AS mean_value, count(*) AS measurements FROM observations GROUP BY loinc, name"],
+    encounters: ["Hospital stays", "SELECT type, count(*) AS stays FROM encounters GROUP BY type"],
+  };
+
+  function workspacePanel(out) {
+    const w = out.workspace;
+    const permit = encodeURIComponent(w.permit);
+    const c = el("section", "workspace");
+    const head = el("div", "ws-head");
+    head.append(el("span", "ws-title", `Secure workspace · permit ${w.permit}`), el("span", "ws-status", "Open · downloads blocked"));
+    c.append(head, el("p", "ws-note", "Pseudonymised records (no names) for your approved cohort. You analyse them here; the data cannot be downloaded. Only reviewed, anonymised results may leave."));
+    const tiles = el("div", "ws-tiles");
+    const tile = (k, v) => { const t = el("div", "ws-tile"); t.append(el("b", "", v), el("span", "", k)); tiles.append(t); };
+    tile("patients", w.patients);
+    Object.entries(w.rows || {}).forEach(([t, n]) => tile(`${t} rows`, n));
+    c.append(tiles);
+    const schema = el("div", "ws-schema");
+    c.append(el("span", "ws-label", "Tables"), schema);
+    const q = el("textarea", "ws-sql"); q.rows = 3; q.value = EXAMPLES.cohort[1]; q.setAttribute("aria-label", "Query");
+    const chips = el("div", "ws-chips");
+    const res = el("div", "ws-result");
+    fetch(`/v1/workspaces/${permit}`).then((r) => r.json()).then((info) => {
+      (info.tables || []).forEach((t) => {
+        const row = el("div", "ws-table");
+        row.append(el("b", "", t.name), el("span", "", `${t.rows} rows · ${t.columns.join(", ")}`));
+        schema.append(row);
+        const ex = EXAMPLES[t.name];
+        if (ex) { const b = el("button", "ws-chip", ex[0]); b.type = "button"; b.onclick = () => { q.value = ex[1]; run.click(); }; chips.append(b); }
+      });
+    });
+    const run = el("button", "secondary-button", "Run query"); run.type = "button";
+    const dl = el("button", "ws-danger", "Download the data"); dl.type = "button";
+    run.onclick = async () => {
+      const r = await post(`/v1/workspaces/${permit}/query`, { sql: q.value });
+      if (r.status !== 200) { res.replaceChildren(el("p", "ws-blocked", `Blocked: ${r.body.detail}`)); return; }
+      res.replaceChildren(table(r.body.columns, r.body.rows), el("p", "form-note", `${r.body.total_rows} rows${r.body.total_rows > r.body.rows.length ? ` (first ${r.body.rows.length} shown)` : ""}. ${r.body.note}`));
+    };
+    dl.onclick = async () => {
+      const r = await post(`/v1/workspaces/${permit}/download`);
+      res.replaceChildren(el("p", "ws-blocked", `Download refused (HTTP ${r.status}). ${r.body.message}`));
+    };
+    const actions = el("div", "ws-actions"); actions.append(run, dl);
+    c.append(el("span", "ws-label", "Try a query"), chips, q, actions, res);
+    return c;
+  }
+
+  const pill = (decision) => el("span", `pill pill-${decision}`, LABELS[decision] || decision);
+
+  function requestCard(req, received) {
+    const c = card("The request");
+    const dl = el("dl", "req-grid");
+    const a = req.applicant || {};
+    const add = (k, v) => { if (!v) return; dl.append(el("dt", "", k)); const dd = el("dd"); if (v instanceof Node) dd.append(v); else dd.textContent = v; dl.append(dd); };
+    add("Received", received ? new Date(received).toLocaleString() : "");
+    add("Organisation", a.organisation); add("Contact", a.name); add("Country", a.country);
+    add("Asked for", `${req.requested_as || ""} (${req.requested_format || ""})`);
+    add("Records", (req.requested_records || []).join(", "));
+    add("Purpose", req.purpose); add("Question", req.question);
+    const ol = el("ol", "req-defs"); (req.definitions || []).forEach((d) => ol.append(el("li", "", d)));
+    add("Definitions", ol);
+    c.append(dl);
+    return c;
+  }
+
+  function decisionCard(out) {
+    const c = card("Decision");
+    const top = el("div", "dec-top"); top.append(pill(out.decision), el("span", "form-note", `EHDS Art. ${(out.articles || []).join(", ")}`));
+    c.append(top, el("p", "", out.reason), el("p", "form-note", `Letter sent: ${out.applicant_letter}`));
+    if (out.answer && out.answer.error) c.append(el("p", "ws-blocked", out.answer.error));
+    else if (out.decision === "APPROVE_STATISTICAL") c.append(answerTable(out.answer));
+    (out.held_back || []).forEach((h) => c.append(el("p", "form-note", `Held back: ${h.cell} (would reveal fewer than 10 people compared with ${h.earlier_request}).`)));
+    if (out.workspace) c.append(el("p", "", `Secure workspace ${out.workspace.permit}: ${out.workspace.patients} patients, ${Object.entries(out.workspace.rows || {}).map(([t, n]) => `${t} ${n} rows`).join(", ") || "cohort only"}. Downloads blocked.`));
+    return c;
+  }
+
+  function renderStaff(out, req, received) {
     const body = $("staff-body");
     body.replaceChildren();
     const s = out.staff || {};
-    const steps = card(`Decision trace for ${out.id}: ${out.decision}`);
+    body.append(requestCard(req || {}, received), decisionCard(out));
+    const steps = card("How the decision was made");
     const ol = el("ol", "staff-steps");
     (s.steps || []).forEach((st) => {
       const li = el("li", st.ok ? "ok" : "fail", `${st.check} → ${st.result}${st.evidence ? ` (${st.evidence})` : ""}`);
@@ -109,6 +175,7 @@
       const ul = el("ul"); s.flags.forEach((x) => ul.append(el("li", "", x))); f.append(ul);
       body.append(f);
     }
+    if (out.evidence) body.append(evidenceCard(out.evidence));
     if (s.recipe_summary) {
       const r = card(`How the definitions were read (counting ${s.recipe_summary.counting})`);
       r.append(table(["Term", "Meaning", "Source"], s.recipe_summary.terms.map((t) => [t.Term, t.Meaning, t.Source])));
@@ -134,6 +201,44 @@
     }
   }
 
+  let staffRows = [];
+  async function loadStaff() {
+    staffRows = await (await fetch("/v1/staff/requests")).json();
+    drawStaff();
+  }
+
+  function drawStaff() {
+    const q = $("s-search").value.toLowerCase().trim();
+    const dec = $("s-decision").value, kind = $("s-kind").value, rev = $("s-review").checked;
+    const rows = staffRows.filter((r) => (!q || `${r.id} ${r.organisation} ${r.purpose}`.toLowerCase().includes(q))
+      && (!dec || r.decision === dec) && (!kind || r.asked === kind) && (!rev || r.flags > 0));
+    $("s-count").textContent = `${rows.length} of ${staffRows.length} requests`;
+    const tb = $("s-rows");
+    tb.replaceChildren();
+    rows.forEach((r) => {
+      const tr = el("tr", "s-row"); tr.tabIndex = 0;
+      tr.onclick = () => openStaff(r.seq);
+      tr.onkeydown = (e) => { if (e.key === "Enter") openStaff(r.seq); };
+      const org = el("td"); org.append(el("b", "", r.organisation || "—"), el("small", "", r.purpose));
+      const d = el("td"); d.append(pill(r.decision));
+      tr.append(el("td", "", new Date(r.received).toLocaleTimeString()), el("td", "s-id", r.id), org, el("td", "", r.asked), d,
+        el("td", r.flags ? "s-flag" : "", r.flags ? `${r.flags} flag${r.flags > 1 ? "s" : ""}` : "—"));
+      tb.append(tr);
+    });
+    $("s-empty").hidden = rows.length > 0;
+  }
+
+  async function openStaff(seq) {
+    const e = await (await fetch(`/v1/staff/requests/${seq}`)).json();
+    renderStaff(e.result, e.request, e.received);
+    showView("staff");
+    $("staff-list").hidden = true;
+    $("staff-detail").hidden = false;
+    window.scrollTo(0, 0);
+  }
+
+  function showList() { $("staff-detail").hidden = true; $("staff-list").hidden = false; loadStaff(); loadAudit(); }
+
   async function loadAudit() {
     const res = await fetch("/v1/audit?n=15");
     const data = await res.json();
@@ -150,10 +255,12 @@
     const r = await post("/v1/requests", req).finally(() => { $("formal-run").disabled = false; });
     if (r.status !== 200) { $("formal-note").textContent = r.body.detail || `Error ${r.status}`; return; }
     last = r.body;
-    $("formal-note").textContent = "Done. The Staff desk shows the full trace.";
-    renderApplicant(last);
-    renderStaff(last);
-    loadAudit();
+    const note = $("formal-note");
+    note.textContent = "Done. ";
+    const open = el("button", "text-button", "Review it on the Staff desk →"); open.type = "button";
+    open.onclick = () => openStaff(last.seq);
+    note.append(open);
+    renderApplicant(last, req);
   }
 
   function aiSummary(ai) {
@@ -208,6 +315,7 @@
     "Lab values and measurements": ["Use the latest HbA1c (LOINC 4548-4) per patient.", "Use the latest BMI (LOINC 39156-5) per patient; patients without a BMI are left out."],
     "Hospital stays": ["Inpatient stay = encounter with type 'inpatient'.", "Count stays (not patients) whose start_date is in 2025."],
     "Age groups": ["Age bands on 31 December 2025: 18-29, 30-39, 40-49, 50-59, 60-69, 70-79, 80+.", "Age bands on 31 December 2025: 18-49, 50-64, 65+.", "Age bands on 31 December 2025: 65-74, 75-84, 85+."],
+    "Records: which patients (edit the end)": ["Cohort = adults with ", "Report the size of the cohort you would make available."],
     "What to report (edit the end)": ["Report per region: ", "Report per band: ", "Report per region and age band: ", "Report: "],
   };
 
@@ -232,6 +340,10 @@
     document.querySelector(`input[name="f-kind"][value="${s.requested_as === "health data access application" ? "records" : "stats"}"]`).checked = true;
     $("f-purpose").value = s.purpose || "";
     $("f-question").value = s.question || "";
+    $("f-why").value = "";
+    const recs = s.requested_records || [];
+    document.querySelectorAll('input[name="f-rec"]').forEach((c) => { c.checked = recs.includes(c.value); });
+    toggleRecords();
     $("f-defs").replaceChildren();
     (s.definitions || []).forEach((d) => defRow(d));
     preview();
@@ -239,17 +351,22 @@
 
   function readForm() {
     const records = document.querySelector('input[name="f-kind"]:checked').value === "records";
+    const why = records ? $("f-why").value.trim() : "";
+    const recs = [...document.querySelectorAll('input[name="f-rec"]:checked')].map((c) => c.value);
     return {
       id: currentId || `REQ-${String(Date.now()).slice(-6)}`,
       submitted: new Date().toISOString(),
       applicant: { name: $("f-name").value.trim(), organisation: $("f-org").value.trim(), country: $("f-country").value },
       requested_as: records ? "health data access application" : "health data request",
       requested_format: records ? "pseudonymised records" : "anonymised statistics",
-      purpose: $("f-purpose").value,
+      purpose: why ? `${$("f-purpose").value.trim()} Statistics are not enough: ${why}` : $("f-purpose").value,
+      ...(records && recs.length ? { requested_records: recs } : {}),
       question: $("f-question").value,
       definitions: [...$("f-defs").querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean),
     };
   }
+
+  function toggleRecords() { $("f-records-box").hidden = document.querySelector('input[name="f-kind"]:checked').value !== "records"; }
 
   function preview() { $("f-json").textContent = JSON.stringify(readForm(), null, 2); }
 
@@ -263,7 +380,15 @@
   }
 
   async function init() {
-    document.querySelectorAll(".nav-button").forEach((b) => { b.onclick = () => showView(b.dataset.view); });
+    document.querySelectorAll(".nav-button").forEach((b) => { b.onclick = () => { showView(b.dataset.view); if (b.dataset.view === "staff") showList(); }; });
+    $("staff-back").onclick = showList;
+    $("s-search").oninput = drawStaff;
+    ["s-decision", "s-kind", "s-review"].forEach((id) => { $(id).onchange = drawStaff; });
+    $("s-load").onclick = async () => {
+      $("s-load").disabled = true; $("s-count").textContent = "Running the example requests…";
+      for (const smp of samples) await post("/v1/requests", smp);
+      $("s-load").disabled = false; loadStaff(); loadAudit();
+    };
     fetch("/v1/requests/ai-status").then((r) => r.json()).then((s) => { $("model-mode").textContent = s.enabled ? "AI check: on" : "AI check: off (rules only)"; }).catch(() => {});
     COUNTRIES.forEach(([c, n]) => $("f-country").append(new Option(n, c)));
     const pickDef = $("f-def-pick");
@@ -275,8 +400,9 @@
     });
     pickDef.onchange = () => { if (!pickDef.value) return; const inp = defRow(pickDef.value); pickDef.value = ""; preview(); inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); };
     $("f-def-blank").onclick = () => { defRow("").focus(); preview(); };
-    ["f-org", "f-name", "f-country", "f-purpose", "f-question"].forEach((id) => { $(id).oninput = preview; $(id).onchange = preview; });
-    document.querySelectorAll('input[name="f-kind"]').forEach((r) => { r.onchange = preview; });
+    document.querySelectorAll('input[name="f-rec"]').forEach((c) => { c.onchange = preview; });
+    ["f-org", "f-name", "f-country", "f-purpose", "f-question", "f-why"].forEach((id) => { $(id).oninput = preview; $(id).onchange = preview; });
+    document.querySelectorAll('input[name="f-kind"]').forEach((r) => { r.onchange = () => { toggleRecords(); preview(); }; });
     samples = await (await fetch("/v1/requests/samples")).json();
     const sel = $("formal-sample");
     sel.append(new Option("Empty form", "blank"));
@@ -284,7 +410,7 @@
     const demo = document.createElement("optgroup"); demo.label = "Test requests";
     samples.forEach((s, i) => (s.id.startsWith("R") ? official : demo).append(new Option(`${s.id} · ${s.applicant?.organisation || ""}`, String(i))));
     sel.append(official, demo);
-    sel.onchange = () => fillForm(sel.value === "blank" ? { definitions: [""] } : samples[Number(sel.value)]);
+    sel.onchange = () => fillForm(sel.value === "blank" ? { definitions: [""], requested_records: ["conditions"] } : samples[Number(sel.value)]);
     sel.value = "0";
     sel.onchange();
     $("formal-run").onclick = submit;

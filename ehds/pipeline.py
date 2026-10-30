@@ -71,6 +71,12 @@ def _compute(req: dict, d, out: dict, create_workspace: bool, ai_client=None) ->
             out["staff"]["sql"] = trace["sql"]
             out["staff"]["raw_counts_staff_only"] = trace["raw_counts_staff_only"]
         else:
+            count = next((i for i in rc["items"] if i["type"] == "count"), None)
+            if count is None or not count.get("filters"):
+                out["answer"] = {"error": "The request does not say which patients are needed. Add a line 'Cohort = ...' and "
+                                          "'Report the size of the cohort you would make available.' No workspace was opened."}
+                out["staff"]["flags"].append("Records request without a defined cohort; no workspace opened.")
+                return
             ids = engine.cohort_ids(rc)
             out["verification"] = reference.verify_cohort(rc, ids)
             out["patient_count"] = len(ids)

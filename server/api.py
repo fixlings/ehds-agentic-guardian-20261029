@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -21,6 +22,7 @@ from ehds.pipeline import handle
 REQUESTS_DIR = Path(__file__).resolve().parents[1] / "requests"
 REQUIRED = ("purpose", "question", "requested_as")
 MAX_SPE_ROWS = 20
+HISTORY: list[dict] = []  # in-memory staff list; cleared on restart
 
 router = APIRouter(prefix="/v1", tags=["track3"])
 
@@ -63,7 +65,43 @@ def submit(req: dict) -> JSONResponse:
         staff["recipe_summary"] = explain.recipe_summary(staff["recipe"])
     is_stat = out.get("decision") == "APPROVE_STATISTICAL" and out.get("answer")
     out["privacy"] = explain.privacy_summary(out["answer"]) if is_stat else None
-    return JSONResponse(jsonable_encoder(out))
+    out["seq"] = len(HISTORY) + 1
+    enc = jsonable_encoder(out)
+    HISTORY.append({"seq": out["seq"], "received": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "request": jsonable_encoder(req), "result": enc})
+    return JSONResponse(enc)
+
+
+def _summary(e: dict) -> dict:
+    req, out = e["request"], e["result"]
+    flags = [f for f in out.get("staff", {}).get("flags", [])
+             if not f.startswith(("AI check is off", "AI check unavailable"))]
+    records = str(req.get("requested_as", "")).lower().startswith("health data access")
+    return {"seq": e["seq"], "received": e["received"], "id": out.get("id"),
+            "organisation": (req.get("applicant") or {}).get("organisation", ""),
+            "country": (req.get("applicant") or {}).get("country", ""),
+            "purpose": str(req.get("purpose", ""))[:240], "asked": "Records" if records else "Statistics",
+            "decision": out.get("decision"), "flags": len(flags)}
+
+
+@router.get("/staff/requests")
+def staff_requests() -> list[dict]:
+    return [_summary(e) for e in reversed(HISTORY)]
+
+
+@router.get("/staff/requests/{seq}")
+def staff_request(seq: int) -> dict:
+    if not 1 <= seq <= len(HISTORY):
+        raise HTTPException(404, "Unknown request.")
+    return HISTORY[seq - 1]
+
+
+@router.get("/workspaces/{permit_id}")
+def workspace_info(permit_id: str) -> dict:
+    try:
+        return workspace.info(permit_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, "No workspace for this permit.") from exc
 
 
 @router.post("/workspaces/{permit_id}/download")

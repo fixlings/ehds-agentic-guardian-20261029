@@ -59,6 +59,18 @@
               <label class="choice"><input type="radio" name="f-kind" value="stats" checked><span><strong>Statistics</strong><small>Anonymised numbers. Groups below 10 are hidden.</small></span></label>
               <label class="choice"><input type="radio" name="f-kind" value="records"><span><strong>Records in a secure workspace</strong><small>Pseudonymised data, analysed inside, no download. Explain why statistics are not enough.</small></span></label>
             </div>
+            <div id="f-records-box" class="records-box" hidden>
+              <span class="field-label">Which records do you need?</span>
+              <div class="check-row">
+                <label class="check"><input type="checkbox" name="f-rec" value="conditions"> Diagnoses</label>
+                <label class="check"><input type="checkbox" name="f-rec" value="medications"> Medicines</label>
+                <label class="check"><input type="checkbox" name="f-rec" value="observations"> Lab values</label>
+                <label class="check"><input type="checkbox" name="f-rec" value="encounters"> Hospital stays</label>
+              </div>
+              <label for="f-why">Why are statistics not enough?</label>
+              <textarea id="f-why" rows="2" placeholder="e.g. We train a prediction model that needs each patient's history over time."></textarea>
+              <p class="hint">Without a concrete reason you get statistics instead of records.</p>
+            </div>
           </fieldset>
           <fieldset class="form-step">
             <legend><span class="step-no">3</span> Why do you need it?</legend>
@@ -87,9 +99,25 @@
 
       <main id="view-staff" class="page-view secondary-view" tabindex="-1" hidden>
         <div class="eyebrow">HEALTH DATA ACCESS BODY</div><h1>Staff desk</h1>
-        <p class="view-intro">The full trace of the last submitted request: every rule check, how the definitions were read, the double-check, the secure workspace, and the sealed audit log.</p>
-        <div id="staff-body" class="result-body"><p class="view-intro">Submit a request first.</p></div>
-        <section class="result-card"><strong>Audit log (hash-chained)</strong><div id="audit-body"></div><button type="button" id="audit-refresh" class="secondary-button">Refresh audit log</button></section>
+        <div id="staff-list">
+          <p class="view-intro">Every request received since the app started. Search, filter, and click a request to review it.</p>
+          <div class="staff-toolbar">
+            <input id="s-search" type="search" placeholder="Search ID, organisation or purpose" aria-label="Search">
+            <select id="s-decision" aria-label="Decision"><option value="">All decisions</option><option value="REJECT">Rejected</option><option value="APPROVE_STATISTICAL">Approved: statistics</option><option value="APPROVE_SPE">Approved: secure workspace</option></select>
+            <select id="s-kind" aria-label="Asked for"><option value="">Statistics and records</option><option value="Statistics">Asked for statistics</option><option value="Records">Asked for records</option></select>
+            <label class="check"><input type="checkbox" id="s-review"> Needs review</label>
+          </div>
+          <div class="staff-meta"><span id="s-count" class="form-note"></span><button id="s-load" class="text-button" type="button">Run all example requests</button></div>
+          <section class="result-card staff-table-card">
+            <table class="result-table staff-table"><thead><tr><th>Time</th><th>ID</th><th>Organisation and purpose</th><th>Asked for</th><th>Decision</th><th>Review</th></tr></thead><tbody id="s-rows"></tbody></table>
+            <p id="s-empty" class="form-note">No requests yet. Submit one, or run the example requests.</p>
+          </section>
+          <section class="result-card"><strong>Audit log (hash-chained)</strong><div id="audit-body"></div><button type="button" id="audit-refresh" class="secondary-button">Refresh audit log</button></section>
+        </div>
+        <div id="staff-detail" hidden>
+          <button id="staff-back" class="text-button" type="button">← All requests</button>
+          <div id="staff-body" class="result-body"></div>
+        </div>
       </main>
     </div>
   </div>
