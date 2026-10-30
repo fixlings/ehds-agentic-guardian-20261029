@@ -59,7 +59,7 @@
     letter.append(el("p", "", out.applicant_letter));
     letter.append(el("p", "", `Why: ${out.reason}`));
     body.append(letter);
-    body.append(aiCard(out.ai_check));
+    letter.append(el("p", "form-note", aiSummary(out.ai_check)));
     if (out.answer && out.answer.error) { const e = card("No numbers", true); e.append(el("p", "", out.answer.error)); body.append(e); return; }
     if (out.decision === "APPROVE_STATISTICAL") {
       const c = card("Privacy-protected statistics");
@@ -103,6 +103,7 @@
     steps.append(ol);
     steps.append(el("p", "", `Processed in ${s.seconds} s.`));
     body.append(steps);
+    body.append(aiCard(out.ai_check));
     if (s.flags && s.flags.length) {
       const f = card("Flags for staff review", true);
       const ul = el("ul"); s.flags.forEach((x) => ul.append(el("li", "", x))); f.append(ul);
@@ -153,6 +154,13 @@
     renderApplicant(last);
     renderStaff(last);
     loadAudit();
+  }
+
+  function aiSummary(ai) {
+    if (!ai || ai.status !== "ok") return "Checked by fixed rules.";
+    if (ai.prohibited && ai.quote_verified) return `Automated check: the purpose looks like ${ai.category.replaceAll("_", " ")}.`;
+    const flagged = (ai.checks || []).some((k) => k.risk !== "low");
+    return flagged ? "Automated check: some points were passed to staff for review." : "Automated check: no concerns found.";
   }
 
   function aiCard(ai) {
