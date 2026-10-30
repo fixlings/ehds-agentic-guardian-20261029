@@ -1,16 +1,4 @@
-<div align="center">
-
 # Health Data Navigator
-
-**The health data access desk that sees the leak others miss.**
-
-Decisions in seconds · the law cited · patients protected, even against clever combinations of questions
-
-`10/10 decisions` · `6/6 numbers` · `0 privacy leaks` on the official test
-
-<sub>AIM Austria hackathon · Track 3 · European Health Data Space (EHDS)</sub>
-
-</div>
 
 ---
 
