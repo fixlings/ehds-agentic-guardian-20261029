@@ -330,6 +330,28 @@
     return inp;
   }
 
+  const JUST = /aggregates? (?:are|is) not enough|statistics (?:are|is) not (?:enough|sufficient)/i;
+  const REC_WORDS = {
+    conditions: /diagnos|condition|icd/i,
+    medications: /medic|drug|prescri|\batc\b/i,
+    observations: /\blab|hba1c|observation|loinc|values?\b/i,
+    encounters: /hospital|stay|encounter|admission/i,
+  };
+
+  function splitPurpose(p) {
+    const parts = (p || "").match(/[^.!?]+[.!?]*/g) || [];
+    const i = parts.findIndex((x) => JUST.test(x));
+    if (i < 0) return [p || "", ""];
+    const why = parts.slice(i).join("").trim().replace(/^statistics (?:are|is) not (?:enough|sufficient):\s*/i, "");
+    return [parts.slice(0, i).join("").trim(), why];
+  }
+
+  function ensureCohortLines() {
+    const vals = [...$("f-defs").querySelectorAll("input")].map((i) => i.value.trim().toLowerCase());
+    if (!vals.some((v) => v.startsWith("cohort"))) defRow("Cohort = adults with ");
+    if (!vals.some((v) => v.includes("size of the cohort"))) defRow("Report the size of the cohort you would make available.");
+  }
+
   let currentId = "";
   function fillForm(s) {
     currentId = s.id || "";
@@ -338,10 +360,13 @@
     $("f-name").value = a.name || "";
     $("f-country").value = a.country || "AT";
     document.querySelector(`input[name="f-kind"][value="${s.requested_as === "health data access application" ? "records" : "stats"}"]`).checked = true;
-    $("f-purpose").value = s.purpose || "";
+    const records = s.requested_as === "health data access application";
+    const [purpose, why] = records ? splitPurpose(s.purpose) : [s.purpose || "", ""];
+    $("f-purpose").value = purpose;
     $("f-question").value = s.question || "";
-    $("f-why").value = "";
-    const recs = s.requested_records || [];
+    $("f-why").value = why;
+    const recs = s.requested_records ||
+      (records ? Object.keys(REC_WORDS).filter((k) => REC_WORDS[k].test(s.question || "")) : []);
     document.querySelectorAll('input[name="f-rec"]').forEach((c) => { c.checked = recs.includes(c.value); });
     toggleRecords();
     $("f-defs").replaceChildren();
@@ -359,7 +384,7 @@
       applicant: { name: $("f-name").value.trim(), organisation: $("f-org").value.trim(), country: $("f-country").value },
       requested_as: records ? "health data access application" : "health data request",
       requested_format: records ? "pseudonymised records" : "anonymised statistics",
-      purpose: why ? `${$("f-purpose").value.trim()} Statistics are not enough: ${why}` : $("f-purpose").value,
+      purpose: why ? `${$("f-purpose").value.trim()} ${JUST.test(why) ? why : `Statistics are not enough: ${why}`}` : $("f-purpose").value,
       ...(records && recs.length ? { requested_records: recs } : {}),
       question: $("f-question").value,
       definitions: [...$("f-defs").querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean),
@@ -402,7 +427,7 @@
     $("f-def-blank").onclick = () => { defRow("").focus(); preview(); };
     document.querySelectorAll('input[name="f-rec"]').forEach((c) => { c.onchange = preview; });
     ["f-org", "f-name", "f-country", "f-purpose", "f-question", "f-why"].forEach((id) => { $(id).oninput = preview; $(id).onchange = preview; });
-    document.querySelectorAll('input[name="f-kind"]').forEach((r) => { r.onchange = () => { toggleRecords(); preview(); }; });
+    document.querySelectorAll('input[name="f-kind"]').forEach((r) => { r.onchange = () => { toggleRecords(); if (r.value === "records") ensureCohortLines(); preview(); }; });
     samples = await (await fetch("/v1/requests/samples")).json();
     const sel = $("formal-sample");
     sel.append(new Option("Empty form", "blank"));
