@@ -1,7 +1,8 @@
 """AI moderation of a request. The model reviews the whole request; it can only make a decision stricter.
 
-On when OPENROUTER_API_KEY is set (switch off with EHDS_AI_CHECK=0). The request itself is sent
-(organisation, country, purpose, question, definitions, requested data); never patient data. A finding
+On when MISTRAL_API_KEY (EU endpoint) or OPENROUTER_API_KEY is set (switch off with EHDS_AI_CHECK=0).
+The request itself is sent (organisation, country, purpose, question, definitions, requested data);
+never patient data. A finding
 can only change the decision if the model quotes the words from the request that prove it. If the model
 is unavailable the rules decide alone and staff see that.
 """
@@ -62,7 +63,7 @@ _cache: dict[str, dict] = {}
 
 
 def enabled() -> bool:
-    return bool(os.environ.get("OPENROUTER_API_KEY")) and os.environ.get("EHDS_AI_CHECK", "1") != "0"
+    return bool(os.environ.get("MISTRAL_API_KEY") or os.environ.get("OPENROUTER_API_KEY")) and os.environ.get("EHDS_AI_CHECK", "1") != "0"
 
 
 def _norm(s: str) -> str:
@@ -94,12 +95,21 @@ def review(req: dict, client=None, earlier: list[dict] | None = None) -> dict:
         return _cache[key]
     try:
         if client is None:
-            from server.llm import OpenRouterClient
+            if os.environ.get("MISTRAL_API_KEY"):
+                from server.mistral_eu import MistralEuClient
 
-            client = OpenRouterClient(timeout_s=25)
+                client = MistralEuClient(timeout_s=25)
+            else:
+                from server.llm import OpenRouterClient
+
+                client = OpenRouterClient(timeout_s=25)
         raw = client.complete_json(model="", system=SYSTEM, user=user)
     except Exception as exc:  # noqa: BLE001 — model outage must never block the rules
-        return {"status": "unavailable", "error": type(exc).__name__}
+        failure = {"status": "unavailable", "error": type(exc).__name__}
+        status_code = getattr(getattr(exc, "response", None), "status_code", None)
+        if isinstance(status_code, int):
+            failure["http_status"] = status_code  # safe to show; never include provider response or key
+        return failure
     text = _norm(json.dumps(payload(req), ensure_ascii=False).replace('\\"', '"'))
     quote = str(raw.get("prohibited_quote") or "")
     checks = []
