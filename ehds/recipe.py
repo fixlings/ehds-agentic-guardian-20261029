@@ -236,7 +236,10 @@ class Parser:
         if (af := _age_filter(phrase)) and not any(p["kind"] == "age" for p in preds):
             preds.append({**af, "negate": False})
         for r in vocab.REGIONS:
-            if re.search(rf"\bin {r.lower()}\b", low):
+            if re.search(rf"\b(?:except|excluding|outside(?: of)?|without|other than|not in|apart from|but not(?: in)?)\s+"
+                         rf"(?:the\s+)?(?:region\s+(?:of\s+)?)?{r.lower()}\b", low):
+                preds.append({"kind": "region", "value": r, "negate": True})
+            elif re.search(rf"\bin {r.lower()}\b", low):
                 preds.append({"kind": "region", "value": r, "negate": False})
         for h in vocab.HOSPITALS:
             if re.search(rf"\b(?:at|in|from) {h.lower()}\b", low):
@@ -268,7 +271,7 @@ class Parser:
 
         question = self.req.get("question", "")
         ctx = [p for p in self.resolve(question)
-               if p["kind"] in ("condition", "sex", "age", "region", "holder") and not p.get("negate")]
+               if p["kind"] in ("condition", "sex", "age", "region", "holder") and (not p.get("negate") or p["kind"] == "region")]
 
         raw = [t.strip(" .") for t in re.split(
             r",\s*|\s+and\s+(?=(?:the|that|their|mean|average|median|%|number|share|how many|percentage|proportion)\b)",

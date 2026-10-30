@@ -1,0 +1,18 @@
+{
+  "id": "D11",
+  "submitted": "2026-10-30T12:05:00+01:00",
+  "applicant": {
+    "name": "Dr. Anna Steiner",
+    "organisation": "Graz Women's Health Research Unit (university research group)",
+    "country": "AT"
+  },
+  "requested_as": "health data request",
+  "requested_format": "anonymised statistics",
+  "purpose": "Scientific research on regional differences in breast cancer in Austria.",
+  "question": "How many women with breast cancer live in Austria outside Burgenland?",
+  "definitions": [
+    "Breast cancer = any condition with an ICD-10 code starting with C50.",
+    "Women = sex 'female'.",
+    "Report: number of women with breast cancer outside Burgenland."
+  ]
+}

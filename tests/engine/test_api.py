@@ -125,3 +125,14 @@ def test_rejected_request_can_ask_for_manual_review(client):
     assert rows[rej["seq"]]["appeal"] and not rows[ok["seq"]]["appeal"]
     detail = client.get(f"/v1/staff/requests/{rej['seq']}").json()
     assert detail["appeal"]["comment"] == "We are a university."
+
+
+def test_applicant_history_endpoint(client):
+    from ehds import memory
+
+    memory.reset()
+    req = json.loads((ROOT / "requests" / "demo" / "D10.json").read_text(encoding="utf-8"))
+    client.post("/v1/requests", json=req)
+    hist = client.get("/v1/requests/history", params={"organisation": req["applicant"]["organisation"]}).json()
+    assert hist[0]["id"] == "D10" and hist[0]["released"] == {"number_of_women_with_breast_cancer": 114}
+    assert client.get("/v1/requests/history", params={"organisation": "Nobody"}).json() == []

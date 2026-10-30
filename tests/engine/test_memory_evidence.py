@@ -60,3 +60,21 @@ def test_request_without_report_line_releases_nothing():
     out = handle(dict(REQ, id="E1", definitions=["Breast cancer = any condition with an ICD-10 code starting with C50."]),
                  create_workspace=False)
     assert "error" in out["answer"] and "evidence" not in out
+
+
+def test_region_exclusion_trap_is_held_back():
+    from ehds import recipe
+
+    memory.reset()
+    total = json.loads((DEMO / "D10.json").read_text())
+    without = json.loads((DEMO / "D11.json").read_text())
+    filters = recipe.parse(without)["items"][0]["filters"]
+    assert {"kind": "region", "value": "Burgenland", "negate": True} in filters
+    first = handle(total, create_workspace=False)
+    assert first["answer"] == {"number_of_women_with_breast_cancer": 114}
+    second = handle(without, create_workspace=False)
+    assert second["held_back"][0]["earlier_request"] == "D10"
+    assert "suppressed" in json.dumps(second["answer"]) and "112" not in json.dumps(second["answer"])
+    hist = memory.for_organisation(total["applicant"]["organisation"])
+    assert [h["id"] for h in hist] == ["D10", "D11"]
+    assert hist[0]["released"] == {"number_of_women_with_breast_cancer": 114} and hist[1]["held_back"]

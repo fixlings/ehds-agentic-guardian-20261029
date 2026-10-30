@@ -16,7 +16,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
-from ehds import ai_check, audit, explain, workspace
+from ehds import ai_check, audit, explain, memory, workspace
 from ehds.pipeline import handle
 
 REQUESTS_DIR = Path(__file__).resolve().parents[1] / "requests"
@@ -102,6 +102,12 @@ def appeal(seq: int, body: AppealBody) -> dict:
                    "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     audit.log("manual_review_requested", request=e["result"].get("id"), seq=seq)
     return {"status": "requested", "seq": seq}
+
+
+@router.get("/requests/history")
+def request_history(organisation: str) -> list[dict]:
+    """Earlier requests of one organisation and the numbers it received (what the applicant already knows)."""
+    return jsonable_encoder(memory.for_organisation(organisation))
 
 
 @router.get("/staff/requests")

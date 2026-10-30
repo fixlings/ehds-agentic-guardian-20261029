@@ -47,6 +47,32 @@
     return { status: res.status, body: await res.json().catch(() => ({})) };
   }
 
+  function released(h) {
+    const r = h.released;
+    if (!r) return h.decision === "APPROVE_SPE" ? "Secure workspace" : "—";
+    const parts = Object.entries(r).map(([k, v]) => (v && typeof v === "object"
+      ? `${k}: ${Object.values(v).join(" / ")}` : `${k.replaceAll("_", " ")}: ${v}`));
+    const s = parts.join("; ");
+    return (s.length > 160 ? `${s.slice(0, 160)}…` : s) + ((h.held_back || []).length ? " (some held back)" : "");
+  }
+
+  function historyCard(list, title, empty) {
+    const c = card(title);
+    if (!list.length) { c.append(el("p", "form-note", empty)); return c; }
+    c.append(table(["Request", "Question", "Decision", "Numbers received"],
+      list.map((h) => [h.id, h.question || h.purpose, LABELS[h.decision] || h.decision, released(h)])));
+    return c;
+  }
+
+  async function showHistory(req, id) {
+    const org = req.applicant?.organisation;
+    if (!org) return;
+    const list = (await (await fetch(`/v1/requests/history?organisation=${encodeURIComponent(org)}`)).json()).filter((h) => h.id !== id);
+    const c = historyCard(list, "Your organisation's earlier requests", "This is your organisation's first request.");
+    c.append(el("p", "form-note", "Every new answer is compared with these. A number that would reveal fewer than 10 people when subtracted from an earlier one is held back."));
+    $("formal-body").append(c);
+  }
+
   function appealCard(seq) {
     const c = card("Disagree with this decision?");
     c.append(el("p", "", "You can ask a staff member of the Health Data Access Body to review your request by hand."));
@@ -83,7 +109,7 @@
     if (out.decision === "APPROVE_STATISTICAL") {
       const c = card("Privacy-protected statistics");
       c.append(answerTable(out.answer));
-      if (out.privacy) c.append(el("p", "", `${out.privacy.hidden} of ${out.privacy.cells} cells hidden by the small-group rule (<10).`));
+      if (out.privacy) c.append(el("p", "", `${out.privacy.hidden} of ${out.privacy.cells} cells hidden ${(out.held_back || []).length ? "(small groups below 10 or held back, see below)" : "by the small-group rule (<10)"}.`));
       (out.held_back || []).forEach((h) => c.append(el("p", "form-note", `Held back: ${h.cell}. Compared with your earlier request ${h.earlier_request} it would reveal a group of fewer than 10 people.`)));
       body.append(c);
       if (out.evidence) body.append(evidenceCard(out.evidence));
@@ -193,6 +219,7 @@
     steps.append(el("p", "", `Processed in ${s.seconds} s.`));
     body.append(steps);
     body.append(aiCard(out.ai_check));
+    body.append(historyCard(s.earlier_requests || [], "Earlier requests by this organisation (used for the checks)", "No earlier requests from this organisation."));
     if (s.flags && s.flags.length) {
       const f = card("Flags for staff review", true);
       const ul = el("ul"); s.flags.forEach((x) => ul.append(el("li", "", x))); f.append(ul);
@@ -284,6 +311,7 @@
     open.onclick = () => openStaff(last.seq);
     note.append(open);
     renderApplicant(last, req);
+    showHistory(req, last.id);
   }
 
   function aiSummary(ai) {

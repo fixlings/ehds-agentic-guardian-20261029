@@ -32,7 +32,9 @@ def handle(req: dict, create_workspace: bool = True, ai_client=None) -> dict:
         out["answer"] = {"error": "The definitions could not be turned into a calculation. A staff member will review the request."}
         out.pop("workspace", None)
         out["staff"]["flags"].append(f"Calculation failed ({type(exc).__name__}); staff review needed.")
-    memory.remember_request(req, d.decision, d.articles)
+    ans = out.get("answer")
+    released = ans if d.decision == "APPROVE_STATISTICAL" and isinstance(ans, dict) and "error" not in ans else None
+    memory.remember_request(req, d.decision, d.articles, released, [h["cell"] for h in out.get("held_back", [])])
     out["certificate"] = certificate.issue(req, out)
     out["staff"]["seconds"] = round(time.perf_counter() - t0, 3)
     audit.log("decision", request_id=req.get("id"), decision=d.decision, articles=d.articles,

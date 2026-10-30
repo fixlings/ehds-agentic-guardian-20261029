@@ -41,7 +41,9 @@ Art. 66: pseudonymised records only if the applicant gives a concrete reason why
 answer the question (e.g. a model must be trained on individual histories). "We need patient-level data" is
 not a reason. Data must be limited to what the purpose needs.
 "earlier_requests" lists what this organisation asked before: a sudden change of purpose, or a request that
-only makes sense combined with earlier answers, is a risk.
+only makes sense combined with earlier answers, is a risk. "released" shows the numbers already given out. A new
+question that repeats an earlier one but leaves out a small part (one region, one hospital, a narrow age range) lets
+the applicant subtract the two answers and learn about a few people: that is a differencing risk (medium or high).
 Using the answer to decide where to sell, launch or advertise a product is marketing (Art. 54), even when it
 is called research. Look past the wording: judge what the answer would actually be used for, whether the question really serves
 the stated purpose, whether the organisation makes the purpose credible, and whether the groups or filters
@@ -73,7 +75,8 @@ def payload(req: dict, earlier: list[dict] | None = None) -> dict:
     out = {"organisation": applicant.get("organisation", ""), "country": applicant.get("country", "")}
     out.update({k: v for k, v in req.items() if k not in ("id", "submitted", "applicant")})
     if earlier:
-        out["earlier_requests"] = [{k: h[k] for k in ("purpose", "requested_as", "decision")} for h in earlier[-5:]]
+        out["earlier_requests"] = [{k: h.get(k) for k in ("purpose", "question", "requested_as", "decision", "released")}
+                                  for h in earlier[-5:]]
     return out
 
 

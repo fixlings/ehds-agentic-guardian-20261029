@@ -34,12 +34,20 @@ def history(req: dict) -> list[dict]:
         return [h for h in _requests.get(applicant(req), []) if h["id"] != req.get("id")]
 
 
-def remember_request(req: dict, decision: str, articles: list[str]) -> None:
+def for_organisation(org: str) -> list[dict]:
+    """Request history of one organisation, as shown to that applicant."""
+    with _lock:
+        return [dict(h) for h in _requests.get(applicant({"applicant": {"organisation": org}}), [])]
+
+
+def remember_request(req: dict, decision: str, articles: list[str], released: dict | None = None,
+                     held_back: list[str] | None = None) -> None:
     with _lock:
         hist = _requests.setdefault(applicant(req), [])
         hist[:] = [h for h in hist if h["id"] != req.get("id")]
         hist.append({"id": req.get("id"), "purpose": str(req.get("purpose", ""))[:300],
-                     "requested_as": req.get("requested_as", ""), "decision": decision, "articles": articles})
+                     "question": str(req.get("question", ""))[:300], "requested_as": req.get("requested_as", ""),
+                     "decision": decision, "articles": articles, "released": released, "held_back": held_back or []})
 
 
 def _suppress(answer: dict, path: tuple, key: str) -> None:
