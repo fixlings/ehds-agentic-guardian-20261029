@@ -39,13 +39,45 @@
 
       <main id="view-formal" class="page-view" tabindex="-1">
         <div class="eyebrow">OFFICIAL TRACK 3 REQUEST</div><h1>Submit a data access request</h1>
-        <p class="view-intro">Pick an official request (R01–R10), a test request (D01–D04), or edit the JSON. An AI model and fixed rules both check the request; the AI can only make the decision stricter. Then the engine returns privacy-protected numbers or opens a secure workspace. Patient data never goes to the AI.</p>
-        <section class="question-panel">
-          <label for="formal-sample">Example request</label>
-          <select id="formal-sample"></select>
-          <label for="formal-json">Request (JSON)</label>
-          <textarea id="formal-json" rows="12" spellcheck="false" class="mono"></textarea>
-          <div class="form-actions"><button id="formal-run" class="primary-button" type="button"><span aria-hidden="true">⌕</span> Decide <span aria-hidden="true">→</span></button><span id="formal-note" class="form-note">Counts below 10 are shown as &lt;10.</span></div>
+        <p class="view-intro">Fill in the form or start from an example. An AI model and fixed rules both check the request (the AI can only make the decision stricter). Patient data never goes to the AI.</p>
+        <section class="question-panel request-form">
+          <div class="start-row">
+            <label for="formal-sample">Start from</label>
+            <select id="formal-sample"></select>
+          </div>
+          <fieldset class="form-step">
+            <legend><span class="step-no">1</span> Who is asking?</legend>
+            <div class="form-grid">
+              <div class="span-2"><label for="f-org">Organisation</label><input id="f-org" placeholder="e.g. Medical University of Vienna, epidemiology group"></div>
+              <div><label for="f-country">Country</label><select id="f-country"></select></div>
+              <div class="span-3"><label for="f-name">Contact person</label><input id="f-name" placeholder="Name"></div>
+            </div>
+          </fieldset>
+          <fieldset class="form-step">
+            <legend><span class="step-no">2</span> What do you need?</legend>
+            <div class="choice-row">
+              <label class="choice"><input type="radio" name="f-kind" value="stats" checked><span><strong>Statistics</strong><small>Anonymised numbers. Groups below 10 are hidden.</small></span></label>
+              <label class="choice"><input type="radio" name="f-kind" value="records"><span><strong>Records in a secure workspace</strong><small>Pseudonymised data, analysed inside, no download. Explain why statistics are not enough.</small></span></label>
+            </div>
+          </fieldset>
+          <fieldset class="form-step">
+            <legend><span class="step-no">3</span> Why do you need it?</legend>
+            <label for="f-purpose">Purpose</label>
+            <textarea id="f-purpose" rows="3" placeholder="What will the data be used for?"></textarea>
+            <p class="hint">Allowed: research, public health, policy planning, official statistics, teaching, developing algorithms. Not allowed: insurance pricing, advertising, decisions about employees or individuals.</p>
+            <label for="f-question">Your question</label>
+            <textarea id="f-question" rows="2" placeholder="e.g. How many adults have type 2 diabetes in each region?"></textarea>
+          </fieldset>
+          <fieldset class="form-step">
+            <legend><span class="step-no">4</span> What exactly should be counted?</legend>
+            <ol id="f-defs" class="def-list"></ol>
+            <div class="def-add">
+              <select id="f-def-pick" aria-label="Add a ready-made line"></select>
+              <button type="button" id="f-def-blank" class="secondary-button">+ Empty line</button>
+            </div>
+          </fieldset>
+          <details class="json-preview"><summary>Show as JSON (what is sent)</summary><pre id="f-json" class="sql"></pre></details>
+          <div class="form-actions"><button id="formal-run" class="primary-button" type="button">Check request <span aria-hidden="true">→</span></button><span id="formal-note" class="form-note">Counts below 10 are shown as &lt;10.</span></div>
         </section>
         <section id="formal-result" class="result-section" hidden aria-live="polite">
           <div class="result-top"><div><span class="eyebrow">DECISION</span><h2 id="formal-title">Decision</h2></div><span id="formal-badge" class="result-badge"></span></div>

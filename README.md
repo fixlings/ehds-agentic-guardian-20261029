@@ -38,7 +38,7 @@ Request JSON ──► AI moderation (whole request; no patient data) ┐
 |---|---|
 | `ehds/` | Engine: rules (`judge.py`), AI moderation (`ai_check.py`), release memory (`memory.py`), evidence note (`evidence.py`), definitions → SQL, privacy gate, double computation, secure workspace, audit log, certificate, evaluation |
 | `server/` | HTTP API (`api.py`) and the OpenRouter client (`llm.py`) |
-| `web/` | Page: Submit request, Staff desk |
+| `web/` | Page: Submit request (form with dropdowns and ready-made definition lines), Staff desk |
 | `requests/`, `data/` | Official Track 3 requests and data; `requests/demo/` test requests |
 | `tests/engine/` | All tests, network blocked |
 

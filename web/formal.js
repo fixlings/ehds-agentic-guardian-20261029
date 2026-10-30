@@ -142,8 +142,8 @@
   }
 
   async function submit() {
-    let req;
-    try { req = JSON.parse($("formal-json").value); } catch { $("formal-note").textContent = "The request is not valid JSON."; return; }
+    const req = readForm();
+    if (!req.applicant.organisation || !req.purpose.trim() || !req.question.trim()) { $("formal-note").textContent = "Please fill in organisation, purpose and question."; return; }
     $("formal-note").textContent = "Checking (AI + rules)…";
     $("formal-run").disabled = true;
     const r = await post("/v1/requests", req).finally(() => { $("formal-run").disabled = false; });
@@ -191,6 +191,60 @@
     return c;
   }
 
+  const COUNTRIES = [["AT", "Austria"], ["BE", "Belgium"], ["BG", "Bulgaria"], ["HR", "Croatia"], ["CY", "Cyprus"], ["CZ", "Czechia"], ["DK", "Denmark"], ["EE", "Estonia"], ["FI", "Finland"], ["FR", "France"], ["DE", "Germany"], ["GR", "Greece"], ["HU", "Hungary"], ["IE", "Ireland"], ["IT", "Italy"], ["LV", "Latvia"], ["LT", "Lithuania"], ["LU", "Luxembourg"], ["MT", "Malta"], ["NL", "Netherlands"], ["PL", "Poland"], ["PT", "Portugal"], ["RO", "Romania"], ["SK", "Slovakia"], ["SI", "Slovenia"], ["ES", "Spain"], ["SE", "Sweden"], ["CH", "Switzerland (non-EU)"], ["GB", "United Kingdom (non-EU)"], ["US", "United States (non-EU)"]];
+  const ACTIVE = "A medication is active on 31 December 2025 if start_date is on or before that day and end_date is empty or on or after that day.";
+  const TEMPLATES = {
+    "Who is counted": ["Adult = aged 18 or older on 31 December 2025.", "Women = sex 'female'.", "Men = sex 'male'."],
+    "Diseases (ICD-10)": ["Type 2 diabetes = any condition with an ICD-10 code starting with E11.", "Breast cancer = any condition with an ICD-10 code starting with C50.", "Atrial fibrillation = any condition with an ICD-10 code starting with I48.", "Hypertension = any condition with an ICD-10 code starting with I10.", "COPD = any condition with an ICD-10 code starting with J44.", "Depression = any condition with an ICD-10 code starting with F32."],
+    "Medicines (ATC)": ["Oral anticoagulant = ATC code starting with B01AA or B01AF.", "SGLT2 inhibitor = ATC code starting with A10BK.", "ACE inhibitor = ATC code starting with C09AA; ARB = ATC code starting with C09CA.", ACTIVE],
+    "Lab values and measurements": ["Use the latest HbA1c (LOINC 4548-4) per patient.", "Use the latest BMI (LOINC 39156-5) per patient; patients without a BMI are left out."],
+    "Hospital stays": ["Inpatient stay = encounter with type 'inpatient'.", "Count stays (not patients) whose start_date is in 2025."],
+    "Age groups": ["Age bands on 31 December 2025: 18-29, 30-39, 40-49, 50-59, 60-69, 70-79, 80+.", "Age bands on 31 December 2025: 18-49, 50-64, 65+.", "Age bands on 31 December 2025: 65-74, 75-84, 85+."],
+    "What to report (edit the end)": ["Report per region: ", "Report per band: ", "Report per region and age band: ", "Report: "],
+  };
+
+  function defRow(text = "") {
+    const li = el("li", "def-row");
+    const inp = el("input"); inp.type = "text"; inp.value = text; inp.setAttribute("aria-label", "Definition");
+    const rm = el("button", "icon-button", "✕"); rm.type = "button"; rm.title = "Remove line";
+    rm.onclick = () => { li.remove(); preview(); };
+    inp.oninput = preview;
+    li.append(inp, rm);
+    $("f-defs").append(li);
+    return inp;
+  }
+
+  let currentId = "";
+  function fillForm(s) {
+    currentId = s.id || "";
+    const a = s.applicant || {};
+    $("f-org").value = a.organisation || "";
+    $("f-name").value = a.name || "";
+    $("f-country").value = a.country || "AT";
+    document.querySelector(`input[name="f-kind"][value="${s.requested_as === "health data access application" ? "records" : "stats"}"]`).checked = true;
+    $("f-purpose").value = s.purpose || "";
+    $("f-question").value = s.question || "";
+    $("f-defs").replaceChildren();
+    (s.definitions || []).forEach((d) => defRow(d));
+    preview();
+  }
+
+  function readForm() {
+    const records = document.querySelector('input[name="f-kind"]:checked').value === "records";
+    return {
+      id: currentId || `REQ-${String(Date.now()).slice(-6)}`,
+      submitted: new Date().toISOString(),
+      applicant: { name: $("f-name").value.trim(), organisation: $("f-org").value.trim(), country: $("f-country").value },
+      requested_as: records ? "health data access application" : "health data request",
+      requested_format: records ? "pseudonymised records" : "anonymised statistics",
+      purpose: $("f-purpose").value,
+      question: $("f-question").value,
+      definitions: [...$("f-defs").querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean),
+    };
+  }
+
+  function preview() { $("f-json").textContent = JSON.stringify(readForm(), null, 2); }
+
   function showView(name) {
     document.querySelectorAll(".page-view").forEach((v) => { v.hidden = v.id !== `view-${name}`; });
     document.querySelectorAll(".nav-button").forEach((b) => {
@@ -203,12 +257,28 @@
   async function init() {
     document.querySelectorAll(".nav-button").forEach((b) => { b.onclick = () => showView(b.dataset.view); });
     fetch("/v1/requests/ai-status").then((r) => r.json()).then((s) => { $("model-mode").textContent = s.enabled ? "AI check: on" : "AI check: off (rules only)"; }).catch(() => {});
+    COUNTRIES.forEach(([c, n]) => $("f-country").append(new Option(n, c)));
+    const pickDef = $("f-def-pick");
+    pickDef.append(new Option("+ Add a ready-made line…", ""));
+    Object.entries(TEMPLATES).forEach(([g, items]) => {
+      const og = document.createElement("optgroup"); og.label = g;
+      items.forEach((t) => og.append(new Option(t.length > 90 ? `${t.slice(0, 87)}…` : t, t)));
+      pickDef.append(og);
+    });
+    pickDef.onchange = () => { if (!pickDef.value) return; const inp = defRow(pickDef.value); pickDef.value = ""; preview(); inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); };
+    $("f-def-blank").onclick = () => { defRow("").focus(); preview(); };
+    ["f-org", "f-name", "f-country", "f-purpose", "f-question"].forEach((id) => { $(id).oninput = preview; $(id).onchange = preview; });
+    document.querySelectorAll('input[name="f-kind"]').forEach((r) => { r.onchange = preview; });
     samples = await (await fetch("/v1/requests/samples")).json();
     const sel = $("formal-sample");
-    samples.forEach((s, i) => sel.append(new Option(`${s.id} · ${s.applicant?.organisation || ""} · ${s.requested_as}`, String(i))));
-    const pick = () => { $("formal-json").value = JSON.stringify(samples[Number(sel.value)], null, 2); };
-    sel.onchange = pick;
-    pick();
+    sel.append(new Option("Empty form", "blank"));
+    const official = document.createElement("optgroup"); official.label = "Official Track 3 requests";
+    const demo = document.createElement("optgroup"); demo.label = "Test requests";
+    samples.forEach((s, i) => (s.id.startsWith("R") ? official : demo).append(new Option(`${s.id} · ${s.applicant?.organisation || ""}`, String(i))));
+    sel.append(official, demo);
+    sel.onchange = () => fillForm(sel.value === "blank" ? { definitions: [""] } : samples[Number(sel.value)]);
+    sel.value = "0";
+    sel.onchange();
     $("formal-run").onclick = submit;
     $("audit-refresh").onclick = loadAudit;
     loadAudit();
