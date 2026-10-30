@@ -1,0 +1,19 @@
+{
+  "id": "D07",
+  "submitted": "2026-10-30T10:00:00+01:00",
+  "applicant": {
+    "name": "Dr. Lena Gruber",
+    "organisation": "Vienna Breast Cancer Study Group (university research group)",
+    "country": "AT"
+  },
+  "requested_as": "health data request",
+  "requested_format": "anonymised statistics",
+  "purpose": "Scientific research on breast cancer in Austria.",
+  "question": "How many women have breast cancer, by age band?",
+  "definitions": [
+    "Breast cancer = any condition with an ICD-10 code starting with C50.",
+    "Women = sex 'female'.",
+    "Age bands on 31 December 2025: 0-39, 40+.",
+    "Report per band: women with breast cancer."
+  ]
+}

@@ -95,6 +95,10 @@ def decision_steps(req: dict, out: dict) -> list[dict]:
     allowed = [label for pat, label in judge.ALLOWED_PURPOSE_HINTS if re.search(pat, text, re.I)]
     steps.append({"check": "Allowed purpose (Art. 53)", "ok": bool(allowed),
                   "result": ", ".join(dict.fromkeys(allowed)) or "not clearly recognised", "evidence": ""})
+    for h in out.get("held_back", []):
+        steps.append({"check": "Release memory (differencing)", "ok": False,
+                      "result": f"{h['cell']} held back: differs from {h['earlier_request']} ({h['earlier_cell']}) by fewer than 10 patients",
+                      "evidence": ""})
     if not allowed or out.get("decision") == "REJECT":
         steps.append({"check": "Decision", "ok": False, "result": out.get("reason", ""), "evidence": ""})
         return steps

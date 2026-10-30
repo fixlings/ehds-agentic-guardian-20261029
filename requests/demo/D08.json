@@ -1,0 +1,18 @@
+{
+  "id": "D08",
+  "submitted": "2026-10-30T10:00:00+01:00",
+  "applicant": {
+    "name": "Dr. Lena Gruber",
+    "organisation": "Vienna Breast Cancer Study Group (university research group)",
+    "country": "AT"
+  },
+  "requested_as": "health data access application",
+  "requested_format": "pseudonymised records",
+  "purpose": "We now need the individual records to set insurance premiums for women with breast cancer.",
+  "question": "Which women have breast cancer?",
+  "definitions": [
+    "Breast cancer = any condition with an ICD-10 code starting with C50.",
+    "Women = sex 'female'.",
+    "Report: number of women with breast cancer."
+  ]
+}

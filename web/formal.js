@@ -65,7 +65,9 @@
       const c = card("Privacy-protected statistics");
       c.append(answerTable(out.answer));
       if (out.privacy) c.append(el("p", "", `${out.privacy.hidden} of ${out.privacy.cells} cells hidden by the small-group rule (<10).`));
+      (out.held_back || []).forEach((h) => c.append(el("p", "form-note", `Held back: ${h.cell}. Compared with your earlier request ${h.earlier_request} it would reveal a group of fewer than 10 people.`)));
       body.append(c);
+      if (out.evidence) body.append(evidenceCard(out.evidence));
     }
     if (out.decision === "APPROVE_SPE" && out.workspace) {
       const c = card("Secure processing environment");
@@ -171,6 +173,21 @@
       c.append(ul);
     }
     c.append(el("p", "form-note", `Model: ${ai.model}. It only saw the request, never patient data. A finding changes the decision only if its quote is in the request.`));
+    return c;
+  }
+
+  function evidenceCard(ev) {
+    const c = card("What these numbers can and cannot show", ev.supports === "no");
+    if (ev.status === "ok") {
+      c.append(el("p", "", `Supports the likely conclusion: ${ev.supports}.`));
+      if (ev.can_show) c.append(el("p", "", `Can show: ${ev.can_show}`));
+      if (ev.cannot_show) c.append(el("p", "", `Cannot show: ${ev.cannot_show}`));
+      if (ev.next_steps && ev.next_steps.length) {
+        const ul = el("ul"); ev.next_steps.forEach((s) => ul.append(el("li", "", s))); c.append(el("p", "", "For stronger evidence:")); c.append(ul);
+      }
+    }
+    const ul = el("ul"); (ev.caveats || []).forEach((s) => ul.append(el("li", "", s))); c.append(ul);
+    c.append(el("p", "form-note", ev.status === "ok" ? `Model: ${ev.model}. It saw only this protected result, never patient data.` : "Fixed caveats (AI evidence review off)."));
     return c;
   }
 

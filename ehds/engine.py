@@ -143,6 +143,7 @@ def run(recipe: dict) -> tuple[dict, dict]:
     pdf = df.drop_duplicates("patient_id") if unit == "encounter" else df
     answer: dict = {}
     raw: dict = {}
+    cells: list[tuple] = []
     for combo in itertools.product(*domains) if dims else [()]:
         sel = pd.Series(True, index=df.index)
         for d, v in zip(dims, combo):
@@ -153,19 +154,25 @@ def run(recipe: dict) -> tuple[dict, dict]:
             frame = df if (unit == "encounter" and iu == "encounter") else pdf
             s = sel.reindex(frame.index)
             if it["type"] == "count":
-                n = int((s & _mask(frame, it["filters"], colmap, unit, iu)).sum())
+                m = s & _mask(frame, it["filters"], colmap, unit, iu)
+                n = int(m.sum())
                 cell[it["key"]], rcell[it["key"]] = privacy.count(n), n
+                if n >= privacy.MIN_CELL and frame is pdf:
+                    cells.append((combo, it["key"], frozenset(frame.loc[m, "patient_id"])))
             elif it["type"] == "pct":
-                num = int((s & _mask(frame, it["num"], colmap, unit, iu)).sum())
-                den = int((s & _mask(frame, it["den"], colmap, unit, iu)).sum())
+                mn, md = s & _mask(frame, it["num"], colmap, unit, iu), s & _mask(frame, it["den"], colmap, unit, iu)
+                num, den = int(mn.sum()), int(md.sum())
                 cell[it["key"]], rcell[it["key"]] = privacy.pct(num, den), [num, den]
+                if isinstance(cell[it["key"]], float) and frame is pdf:
+                    cells += [(combo, it["key"] + "#num", frozenset(frame.loc[mn, "patient_id"])),
+                              (combo, it["key"] + "#den", frozenset(frame.loc[md, "patient_id"]))]
             else:
                 vals = frame.loc[s & _mask(frame, it["population"], colmap, unit, iu), colmap["value:" + _sig(it["observation"])]].dropna()
                 fn = privacy.mean if it["type"] == "mean" else privacy.median
                 cell[it["key"]], rcell[it["key"]] = fn(list(vals)), len(vals)
         _put(answer, combo, cell)
         _put(raw, combo, rcell)
-    return answer, {"sql": sql, "raw_counts_staff_only": raw}
+    return answer, {"sql": sql, "raw_counts_staff_only": raw, "released_groups": cells}
 
 
 def _put(tree: dict, combo: tuple, cell: dict):

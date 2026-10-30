@@ -27,6 +27,7 @@ CHECKS = {
     "reidentification_risk": "Could the answer single out or identify people?",
     "data_minimisation": "Asks only for the data it needs?",
     "records_justified": "Records request justified (if records are asked for)?",
+    "consistent_with_earlier_requests": "Consistent with this organisation's earlier requests?",
 }
 
 SYSTEM = f"""You are the moderation officer of a European health data access body. You review one application
@@ -39,6 +40,8 @@ education/teaching, developing and testing algorithms. Commercial applicants may
 Art. 66: pseudonymised records only if the applicant gives a concrete reason why anonymised statistics cannot
 answer the question (e.g. a model must be trained on individual histories). "We need patient-level data" is
 not a reason. Data must be limited to what the purpose needs.
+"earlier_requests" lists what this organisation asked before: a sudden change of purpose, or a request that
+only makes sense combined with earlier answers, is a risk.
 Using the answer to decide where to sell, launch or advertise a product is marketing (Art. 54), even when it
 is called research. Look past the wording: judge what the answer would actually be used for, whether the question really serves
 the stated purpose, whether the organisation makes the purpose credible, and whether the groups or filters
@@ -64,11 +67,13 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s or "").strip().lower()
 
 
-def payload(req: dict) -> dict:
+def payload(req: dict, earlier: list[dict] | None = None) -> dict:
     """What the model sees: the application text. No ids, no applicant name, no patient data."""
     applicant = req.get("applicant") or {}
     out = {"organisation": applicant.get("organisation", ""), "country": applicant.get("country", "")}
     out.update({k: v for k, v in req.items() if k not in ("id", "submitted", "applicant")})
+    if earlier:
+        out["earlier_requests"] = [{k: h[k] for k in ("purpose", "requested_as", "decision")} for h in earlier[-5:]]
     return out
 
 
@@ -76,10 +81,10 @@ def _verified(quote: str, text: str) -> bool:
     return len(_norm(quote)) >= 4 and _norm(quote) in text
 
 
-def review(req: dict, client=None) -> dict:
+def review(req: dict, client=None, earlier: list[dict] | None = None) -> dict:
     if client is None and not enabled():
         return {"status": "off"}
-    data = payload(req)
+    data = payload(req, earlier)
     user = json.dumps(data, ensure_ascii=False, sort_keys=True)
     key = hashlib.sha256(user.encode()).hexdigest()
     if key in _cache:
@@ -92,7 +97,7 @@ def review(req: dict, client=None) -> dict:
         raw = client.complete_json(model="", system=SYSTEM, user=user)
     except Exception as exc:  # noqa: BLE001 — model outage must never block the rules
         return {"status": "unavailable", "error": type(exc).__name__}
-    text = _norm(json.dumps(data, ensure_ascii=False).replace('\\"', '"'))
+    text = _norm(json.dumps(payload(req), ensure_ascii=False).replace('\\"', '"'))
     quote = str(raw.get("prohibited_quote") or "")
     checks = []
     for name, label in CHECKS.items():

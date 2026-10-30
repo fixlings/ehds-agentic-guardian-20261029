@@ -28,13 +28,15 @@ Request JSON ──► AI moderation (whole request; no patient data) ┐
 - **The AI can only make a decision stricter.** A high-risk finding rejects (Art. 54 forbidden use or re-identification, Art. 53 purpose mismatch) or downgrades records to statistics, but only if its quote is really in the request. Medium findings and unquoted findings go to staff as flags. It never approves what the rules reject. If the model is down, the rules decide alone and staff see that.
 - **Patient data never goes to the AI.** Only the application text, without ids or the applicant's name. The engine (`ehds/`) has no network imports; only `server/llm.py` talks to the model. Opted-out patients are removed (`ehds/data.py`) before any calculation.
 - **Privacy:** counts below 10 are `<10`, small percentages/means `suppressed`, every requested group shown, halves round up.
-- **Test requests** `requests/demo/D01–D05` (insurer fees, pharma sales reps, "does my neighbour have diabetes", records without a reason, an app company whose "research" is really a product launch) are in the sample list.
+- **Guardian memory (`ehds/memory.py`).** The app remembers each organisation's earlier requests and the patient groups behind every number it released. The AI sees the earlier purposes; a forbidden request after an approved one is flagged as a purpose change. A new number whose patient group differs from an earlier released one by 1–9 patients is held back (`suppressed`), because subtracting the two would reveal a small group. This is a fixed rule, not AI. Demo: D06 (114 women with breast cancer) then D07 (40+: would be 111, so it is held back), then D08 (same group asks for records for insurance: rejected, purpose change flagged).
+- **Evidence Investigator (`ehds/evidence.py`).** After the numbers are protected, fixed caveats (counts are not causes, hidden groups) are added; with the AI on, a model reads only the question and the protected result and says what the numbers can and cannot show and what analysis would be stronger. It never changes numbers or decisions.
+- **Test requests** `requests/demo/D01–D08` (insurer fees, pharma sales reps, "does my neighbour have diabetes", records without a reason, an app company whose "research" is really a product launch) are in the sample list.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `ehds/` | Engine: rules (`judge.py`), AI moderation (`ai_check.py`), definitions → SQL, privacy gate, double computation, secure workspace, audit log, certificate, evaluation |
+| `ehds/` | Engine: rules (`judge.py`), AI moderation (`ai_check.py`), release memory (`memory.py`), evidence note (`evidence.py`), definitions → SQL, privacy gate, double computation, secure workspace, audit log, certificate, evaluation |
 | `server/` | HTTP API (`api.py`) and the OpenRouter client (`llm.py`) |
 | `web/` | Page: Submit request, Staff desk |
 | `requests/`, `data/` | Official Track 3 requests and data; `requests/demo/` test requests |
@@ -59,5 +61,5 @@ Tests: `make test` (offline, network blocked; the AI is replaced by a fake model
 ## Known limitations
 
 - Roles are self-declared; no logins.
-- Subtracting two answers to reveal a hidden small group is not fully blocked.
+- Differencing protection compares pairs of released groups per organisation and is kept in memory (reset on restart); it does not catch sums over many requests or collusion between organisations.
 - The AI's judgement can vary slightly between models; the official metrics are measured with rules only (`make eval`) and checked again with the AI on.
