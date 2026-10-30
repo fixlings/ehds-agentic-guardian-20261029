@@ -15,6 +15,7 @@ from guardian.contracts.budget import DEFAULT_MODEL, MAX_TOOL_STEPS, REQUEST_DEA
 from guardian.contracts.dataset import CAUSATION_LIMITATION_TEXT
 from guardian.contracts.schemas import (
     AgentRequest,
+    ArticleMapping,
     AgentResponse,
     AuditRecord,
     Interpretation,
@@ -24,7 +25,8 @@ from guardian.contracts.schemas import (
     TurnRecord,
 )
 from guardian.api.sessions import SessionStore
-from guardian.evidence.executor import MockQueryExecutor
+from guardian.evidence.routing import RoutingQueryExecutor
+from guardian.evidence.track3_executor import TRACK3_DATASET_ID
 from guardian.evidence.investigator import EvidenceInvestigator
 from guardian.nlp.interpreter import Interpreter, ModelCallError
 from guardian.nlp.normalizer import Normalizer
@@ -52,14 +54,14 @@ class Orchestrator:
         *,
         client: Any | None = None,
         guardian: PurposeGuardian | None = None,
-        executor: MockQueryExecutor | None = None,
+        executor: Any | None = None,
         investigator: EvidenceInvestigator | None = None,
         audit_log: InMemoryAuditLog | None = None,
         deadline_s: float = REQUEST_DEADLINE_S,
     ) -> None:
         self._client = client
         self._guardian = guardian or PurposeGuardian()
-        self._executor = executor or MockQueryExecutor()
+        self._executor = executor or RoutingQueryExecutor()
         self._investigator = investigator or EvidenceInvestigator()
         self.audit_log = audit_log or InMemoryAuditLog()
         self._deadline_s = deadline_s
@@ -97,7 +99,7 @@ class Orchestrator:
                 dataset_id=request.dataset_id,
             )
             interpretation = interpreter.interpret(request.message, session)
-        policy = self._guardian.evaluate(request, session, interpretation)
+        policy = _with_articles(self._guardian.evaluate(request, session, interpretation))
         decision = self._decision(policy, interpretation)
         evidence = None
         aggregate = None
@@ -113,7 +115,7 @@ class Orchestrator:
                 )
             except KeyError as exc:
                 raise UnknownDatasetError(str(exc)) from exc
-            aggregate = self._investigator.last_aggregate
+            aggregate = _public_aggregate(self._investigator.last_aggregate)
             tool_steps += evidence.tool_steps_used
         if tool_steps > MAX_TOOL_STEPS:
             raise RuntimeError("tool step budget exceeded")
@@ -125,7 +127,7 @@ class Orchestrator:
             evidence,
             live_note="Interpreted by EU Mistral (mistral-small-2603)." if live_validated else None,
         )
-        limitations = _limitations(decision, evidence)
+        limitations = _limitations(decision, evidence, request.dataset_id)
         audit = self._audit(
             request,
             session,
@@ -248,6 +250,8 @@ def _explanation(
         for item in policy.evidence:
             parts.append(item if item.endswith(".") else f"{item}.")
         parts.append("No aggregate was executed.")
+        if policy.article_mapping.citation:
+            parts.append(f"Legal basis: {policy.article_mapping.citation}.")
         return " ".join(parts)
     if decision == "clarify":
         question = interpretation.clarification_question or "Please clarify the population, condition, or measure."
@@ -257,6 +261,8 @@ def _explanation(
         parts.append("No aggregate was executed.")
         return " ".join(parts)
     parts.append("Request allowed for a synthetic public-health aggregate.")
+    if policy.article_mapping.citation:
+        parts.append(f"Legal basis: {policy.article_mapping.citation}.")
     if evidence is not None:
         parts.extend(evidence.supported_conclusions)
         parts.extend(evidence.unsupported_claims)
@@ -268,10 +274,48 @@ def _explanation(
     return " ".join(parts)
 
 
-def _limitations(decision: str, evidence) -> list[str]:
-    limits = ["Synthetic fixture only. These figures are not real patient statistics."]
+def _limitations(decision: str, evidence, dataset_id: str | None = None) -> list[str]:
+    if dataset_id == TRACK3_DATASET_ID:
+        limits = [
+            "Official Track 3 synthetic data (20,000 made-up patients); opted-out patients excluded.",
+            "Counts below 10 are shown as <10. Total population is not disclosed.",
+        ]
+    else:
+        limits = ["Synthetic fixture only. These figures are not real patient statistics."]
     if evidence is not None and CAUSATION_LIMITATION_TEXT in evidence.unsupported_claims:
         limits.append(CAUSATION_LIMITATION_TEXT)
     if decision == "reject":
         limits.append("Forbidden purposes do not receive aggregate results.")
     return limits
+
+
+EHDS_SOURCE_URL = "https://eur-lex.europa.eu/eli/reg/2025/327/oj"
+_REJECT_CITATION = "Regulation (EU) 2025/327 (EHDS) Art. 54 (prohibited secondary use)"
+_ALLOW_CITATION = (
+    "Regulation (EU) 2025/327 (EHDS) Art. 53 (permitted purposes) and "
+    "Art. 69 (anonymised statistical output)"
+)
+_ARTICLE_BY_REASON = {
+    ReasonCode.allowed_public_health: _ALLOW_CITATION,
+    ReasonCode.purpose_forbidden_insurance: _REJECT_CITATION,
+    ReasonCode.purpose_forbidden_employment: _REJECT_CITATION,
+    ReasonCode.purpose_forbidden_marketing: _REJECT_CITATION,
+    ReasonCode.purpose_forbidden_identity: _REJECT_CITATION,
+    ReasonCode.role_forbidden: _REJECT_CITATION,
+}
+
+
+def _with_articles(policy: PolicyDecision) -> PolicyDecision:
+    """Attach the same EHDS articles the deterministic Track 3 judge (ehds.judge) cites."""
+    citation = _ARTICLE_BY_REASON.get(policy.reason_code)
+    if citation is None:
+        return policy
+    mapping = ArticleMapping(status="verified", citation=citation, source_url=EHDS_SOURCE_URL)
+    return policy.model_copy(update={"article_mapping": mapping})
+
+
+def _public_aggregate(aggregate):
+    """On the official data the exact total and timing counts could reveal hidden small groups."""
+    if aggregate is None or aggregate.dataset_id != TRACK3_DATASET_ID:
+        return aggregate
+    return aggregate.model_copy(update={"population_n": None, "timing": None})

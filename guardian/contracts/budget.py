@@ -12,3 +12,6 @@ FIXTURE_VERSION = "2026-10-29"
 MISTRAL_EU_BASE_URL = "https://api.eu.mistral.ai"
 DEFAULT_MODEL = "mistral-small-2603"
 CANDIDATE_MODEL = "mistral-medium-3-5"
+
+# Official Track 3 rule: counts below 10 are shown as "<10".
+TRACK3_SUPPRESSION_THRESHOLD = 10

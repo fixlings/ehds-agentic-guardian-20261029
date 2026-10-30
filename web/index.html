@@ -8,6 +8,7 @@
   <title>Health Data Navigator · EHDS Track 3</title>
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
+  <script src="/formal.js" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -17,8 +18,14 @@
         <div><strong>Health Data<br>Navigator</strong><small>Research, with trust built in</small></div>
       </div>
       <nav class="side-nav" aria-label="Main navigation">
-        <button class="nav-button active" data-view="request" aria-current="page">
-          <span class="nav-icon" aria-hidden="true">＋</span> New request
+        <button class="nav-button active" data-view="formal" aria-current="page">
+          <span class="nav-icon" aria-hidden="true">▤</span> Submit request
+        </button>
+        <button class="nav-button" data-view="request">
+          <span class="nav-icon" aria-hidden="true">＋</span> Ask a question
+        </button>
+        <button class="nav-button" data-view="staff">
+          <span class="nav-icon" aria-hidden="true">⚖</span> Staff desk
         </button>
         <button class="nav-button" data-view="history">
           <span class="nav-icon" aria-hidden="true">☷</span> My requests <span id="history-count" class="nav-count">0</span>
@@ -36,11 +43,27 @@
 
     <div class="main-column">
       <header class="topbar">
-        <span class="project-label"><span class="project-dot" aria-hidden="true"></span> EHDS TRACK 3 <span class="topbar-divider">/</span> SYNTHETIC DEMO</span>
+        <span class="project-label"><span class="project-dot" aria-hidden="true"></span> EHDS TRACK 3 <span class="topbar-divider">/</span> 20,000 SYNTHETIC PATIENTS</span>
         <div class="topbar-right"><span class="mode-pill" id="model-mode">Processing mode shown after first request</span><span class="avatar" aria-hidden="true">R</span><span class="user-label">Researcher<br><small>Demo role</small></span></div>
       </header>
 
-      <main id="view-request" class="page-view" tabindex="-1">
+      <main id="view-formal" class="page-view" tabindex="-1">
+        <div class="eyebrow">OFFICIAL TRACK 3 REQUEST</div><h1>Submit a data access request</h1>
+        <p class="view-intro">Pick one of the official requests R01–R10 or edit the JSON. The rules engine decides, cites the EHDS articles, and either returns privacy-protected numbers or opens a secure workspace. No AI model is used here.</p>
+        <section class="question-panel">
+          <label for="formal-sample">Example request</label>
+          <select id="formal-sample"></select>
+          <label for="formal-json">Request (JSON)</label>
+          <textarea id="formal-json" rows="12" spellcheck="false" class="mono"></textarea>
+          <div class="form-actions"><button id="formal-run" class="primary-button" type="button"><span aria-hidden="true">⌕</span> Decide <span aria-hidden="true">→</span></button><span id="formal-note" class="form-note">Counts below 10 are shown as &lt;10.</span></div>
+        </section>
+        <section id="formal-result" class="result-section" hidden aria-live="polite">
+          <div class="result-top"><div><span class="eyebrow">DECISION</span><h2 id="formal-title">Decision</h2></div><span id="formal-badge" class="result-badge"></span></div>
+          <div id="formal-body" class="result-body"></div>
+        </section>
+      </main>
+
+      <main id="view-request" class="page-view" tabindex="-1" hidden>
         <section class="hero">
           <div class="eyebrow">ASK HEALTH DATA <span class="eyebrow-line"></span></div>
           <h1>What would you like to investigate?</h1>
@@ -123,6 +146,13 @@
         <p class="bottom-note">Research prototype · Synthetic dataset · No verified legal-article mapping · Not a clinical or production data service</p>
       </main>
 
+      <main id="view-staff" class="page-view secondary-view" tabindex="-1" hidden>
+        <div class="eyebrow">HEALTH DATA ACCESS BODY</div><h1>Staff desk</h1>
+        <p class="view-intro">The full trace of the last submitted request: every rule check, how the definitions were read, the double-check, the secure workspace, and the sealed audit log.</p>
+        <div id="staff-body" class="result-body"><p class="view-intro">Submit a request first.</p></div>
+        <section class="result-card"><strong>Audit log (hash-chained)</strong><div id="audit-body"></div><button type="button" id="audit-refresh" class="secondary-button">Refresh audit log</button></section>
+      </main>
+
       <main id="view-history" class="page-view secondary-view" tabindex="-1" hidden>
         <div class="eyebrow">CURRENT BROWSER SESSION</div><h1>My requests</h1><p class="view-intro">Your recent questions in this tab. Nothing is stored in browser storage or uploaded beyond the API request.</p><div id="history-items" class="history-items"></div>
       </main>
@@ -135,7 +165,7 @@
           <article><span class="how-step">03</span><h2>Investigate</h2><p>For permitted requests, the synthetic executor calculates results and the Evidence Agent checks scientific limitations.</p></article>
           <article><span class="how-step">04</span><h2>Explain</h2><p>Only backend-returned outcomes, non-suppressed results and audit references are displayed.</p></article>
         </div>
-        <div class="honesty-note"><strong>Important limitation</strong><p>The current backend implements small-cell suppression, but we have not verified cross-query disclosure-history protection (for example, 72 − 71 = 1). This interface does not claim to close that gap. Roles in the demo are self-declared; no real identity or access verification is present.</p></div>
+        <div class="honesty-note"><strong>Important limitation</strong><p>Small groups (&lt;10) are hidden and the chat API no longer reveals the total population, but we do not yet block every cross-query differencing attack (for example, 72 − 71 = 1). This interface does not claim to close that gap. Roles in the demo are self-declared; no real identity or access verification is present.</p></div>
       </main>
     </div>
   </div>

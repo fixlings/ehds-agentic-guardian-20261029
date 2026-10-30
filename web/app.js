@@ -2,7 +2,7 @@
 "use strict";
 
 const API_PATH = "/v1/agent/request";
-const DATASET_ID = "synthetic-breast-cancer-demo";
+const DATASET_ID = "track3-ehds-20k";
 const EXAMPLES = Object.freeze({
   a: {
     message: "How many women aged 50 or older have breast cancer and BMI >=30?",
@@ -40,7 +40,7 @@ function setNote(message) {
 }
 
 function showView(name, focus = true) {
-  for (const id of ["request", "history", "how"]) {
+  for (const id of ["formal", "request", "staff", "history", "how"]) {
     $(`view-${id}`).hidden = id !== name;
   }
   document.querySelectorAll("[data-view]").forEach((button) => {
@@ -118,7 +118,7 @@ function renderUnderstanding(response) {
 
 function buildTable(aggregate) {
   const outer = create("section", "result-card");
-  outer.append(create("strong", "", "Returned aggregate · synthetic figures"));
+  outer.append(create("strong", "", "Returned aggregate · Track 3 synthetic data"));
   const rows = Array.isArray(aggregate.rows) ? aggregate.rows : [];
   if (aggregate.suppressed) {
     outer.append(create("p", "", "The filtered population is below the small-cell threshold. Counts are hidden."));
@@ -138,7 +138,7 @@ function buildTable(aggregate) {
     const group = row.group && typeof row.group === "object"
       ? Object.entries(row.group).map(([key, value]) => `${humanize(key)}: ${humanize(value)}`).join(" · ")
       : "";
-    const display = row.suppressed ? ["Suppressed", "—", "—"] : [
+    const display = row.suppressed ? ["<10", "suppressed", "suppressed"] : [
       Number.isFinite(row.count) ? String(row.count) : "—",
       Number.isFinite(row.rate_per_1000) ? String(row.rate_per_1000) : "—",
       Number.isFinite(row.prevalence) ? String(row.prevalence) : "—",
@@ -151,9 +151,9 @@ function buildTable(aggregate) {
   });
   table.append(tbody); outer.append(table);
   if (rows.some((row) => row.suppressed)) {
-    outer.append(create("p", "", "At least one small group was suppressed; hidden counts cannot be viewed here."));
+    outer.append(create("p", "", "Groups with fewer than 10 patients are shown as <10; their rates are suppressed."));
   }
-  outer.append(create("p", "", "Illustrative synthetic data, not real Austrian or European patient statistics."));
+  outer.append(create("p", "", "Official Track 3 synthetic data (20,000 made-up patients, opted-out patients removed). Not real statistics."));
   return outer;
 }
 
@@ -179,7 +179,7 @@ function renderDetails(response) {
   if (mapping?.status === "verified" && mapping.source_url) {
     detailRow("Legal citation", `${mapping.citation} · ${mapping.source_url}`);
   } else {
-    detailRow("Legal article mapping", "Unresolved in this prototype; no EHDS article citation is claimed.");
+    detailRow("Legal article mapping", "No article cited for this outcome (clarification or injection check).");
   }
   if (policy.purpose_changed) detailRow("Purpose continuity", "A change in declared purpose was detected in this session.");
 }

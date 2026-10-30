@@ -133,7 +133,8 @@ class StructuredQuery(BaseModel):
 class ArticleMapping(BaseModel):
     """Only `verified` may carry a citation, and only with a source URL.
 
-    This module has no verified EHDS article table. Emit `unresolved`.
+    The orchestrator attaches the EHDS articles used by the deterministic
+    Track 3 judge (ehds.judge); otherwise emit `unresolved`.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -234,7 +235,7 @@ class AggregateResult(BaseModel):
     dataset_id: str
     fixture_version: str
     query_fingerprint: str
-    population_n: int = Field(ge=0)
+    population_n: int | None = Field(default=None, ge=0)
     suppressed: bool
     rows: list[AggregateRow] = Field(default_factory=list)
     timing: TimingSummary | None = None

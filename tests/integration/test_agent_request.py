@@ -91,7 +91,11 @@ def test_acceptance_prompts_end_to_end() -> None:
             assert body["synthetic"] is True
             assert body["tool_steps"] <= 3
             assert body["policy"]["authoritative"] is True
-            assert body["policy"]["article_mapping"]["status"] == "unresolved"
+            mapping = body["policy"]["article_mapping"]
+            if body["policy"]["reason_code"] in {"prompt_injection", "needs_clarification"}:
+                assert mapping["status"] == "unresolved"
+            else:
+                assert mapping["status"] == "verified" and "Art. 5" in mapping["citation"]
             assert "row_id" not in json.dumps(body)
             if body["evidence"] is not None:
                 assert body["evidence"]["causation_supported"] is False

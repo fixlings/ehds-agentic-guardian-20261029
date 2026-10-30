@@ -19,6 +19,7 @@ from guardian.api.orchestrator import (
     Orchestrator,
     UnknownDatasetError,
 )
+from guardian.api.requests_api import router as track3_router
 from guardian.api.sessions import UnknownSessionError
 from guardian.contracts.schemas import ROUTE_PATH, AgentRequest, AgentResponse, ErrorBody
 
@@ -37,6 +38,7 @@ def create_app(
         orchestrator = Orchestrator(client=client)
     app = FastAPI(title="EHDS agentic guardian", version="0.1.0")
     app.state.orchestrator = orchestrator
+    app.include_router(track3_router)
 
     @app.post(ROUTE_PATH)
     async def agent_request(request: Request) -> JSONResponse:

@@ -1,0 +1,7 @@
+{"id": "J03", "applicant": {"name": "Test", "organisation": "University hospital", "country": "AT"},
+ "requested_as": "health data request", "requested_format": "anonymised statistics",
+ "purpose": "Research on asthma in Tirol by sex.",
+ "question": "How many patients have asthma, by sex?",
+ "definitions": [
+  "Asthma = any condition with an ICD-10 code starting with J45.",
+  "Report per sex: patients with asthma."]}

@@ -124,7 +124,10 @@ class EvidenceInvestigator:
         if result.timing and (result.timing.unknown > 0 or result.timing.after_diagnosis > 0) and asks_or_combo:
             missing.append(_TIMING_GAP)
         if result.suppressed or any(row.suppressed for row in result.rows):
-            missing.append(f"Small-cell suppression applies below {SUPPRESSION_THRESHOLD} rows.")
+            threshold = getattr(executor, "suppression_threshold", SUPPRESSION_THRESHOLD)
+            if hasattr(executor, "for_dataset"):
+                threshold = getattr(executor.for_dataset(query.dataset_id), "suppression_threshold", threshold)
+            missing.append(f"Small-cell suppression applies below {threshold} rows.")
         return self._assessment(
             supported=supported,
             unsupported=unsupported,

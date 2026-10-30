@@ -216,3 +216,14 @@ textarea:focus, input:focus, select:focus { border-color: #60a1ef; box-shadow: 0
   .result-table { font-size: 11px; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+
+/* Track 3 formal request + staff desk */
+#view-formal label, #view-staff label { display: block; font-size: 12px; font-weight: 760; margin: 12px 0 6px; color: var(--muted); }
+#formal-sample { width: 100%; padding: 9px; border-radius: 8px; border: 1px solid var(--border); font: inherit; }
+.mono { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; border-radius: 8px; border: 1px solid var(--border); padding: 10px; box-sizing: border-box; }
+.result-section[data-state="APPROVE_SPE"] .result-badge { background: #e7f0ff; color: #0751be; }
+.result-section[data-state="REJECT"] .result-badge { background: #ffe8eb; color: #a52234; }
+.staff-steps li.fail { color: #a52234; }
+.staff-steps li.ok { color: #076a53; }
+.audit-row { font-size: 11px; font-family: ui-monospace, Menlo, Consolas, monospace; color: #5e708d; margin: 3px 0; overflow-wrap: anywhere; }
+pre.sql { white-space: pre-wrap; font-size: 11px; background: #f1f6fd; padding: 10px; border-radius: 8px; overflow-x: auto; }
