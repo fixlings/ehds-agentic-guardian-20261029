@@ -18,15 +18,9 @@ Every access body hides groups smaller than 10. But two harmless-looking questio
 
 A rule-following tool releases both answers. Our **Guardian** compares each new answer with the earlier ones from the same organisation. If the two differ by only 1–9 patients, it holds the new answer back.
 
-<p align="center"><img src="docs/media/gif-1-leak.gif" width="640" alt="Demo D10 then D11: the second count is held back and staff see a differencing flag"></p>
-<p align="center"><sub>Both counts are above 10. Together they reveal two patients.</sub></p>
-
 ### 2. It notices when the purpose changes
 
 A team approved for research returns asking for records to set insurance premiums, a use EHDS law forbids. The Guardian connects the two requests, rejects the second under Art. 54 and alerts staff.
-
-<p align="center"><img src="docs/media/gif-2-purpose.gif" width="640" alt="Demo D06 then D08: same team, insurance purpose, rejected under Article 54 with a staff alert"></p>
-<p align="center"><sub>Same team, new purpose. The Guardian connects the two requests.</sub></p>
 
 ### 3. It tells researchers what the numbers cannot prove
 
@@ -43,13 +37,7 @@ Every request ends in one of three outcomes, each backed by the relevant EHDS ar
 - **anonymous statistics**;
 - **a secure workspace**, where approved researchers can analyse coded records and nothing can be downloaded.
 
-<p align="center"><img src="docs/media/gif-3-workspace.gif" width="640" alt="Demo D09: secure workspace with the exact patient count, a summary query, download blocked with 403, and the audit log entry"></p>
-<p align="center"><sub>Records can be analysed, never downloaded.</sub></p>
-
 Staff see every step, can review rejections, and every action is written to a tamper-evident audit log.
-
-<p align="center"><img src="docs/media/staff-view.png" width="640" alt="Staff view with generated SQL, term-to-code mapping, Guardian flags and the audit log"></p>
-<p align="center"><sub>Staff see every step.</sub></p>
 
 ---
 
