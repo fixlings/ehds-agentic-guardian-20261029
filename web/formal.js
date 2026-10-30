@@ -118,7 +118,11 @@
     };
     const lock = el("div", "ws-lock", "Download is not possible. There is no export: data and patient IDs never leave this workspace (Art. 73). Only summary results are shown here.");
     const actions = el("div", "ws-actions"); actions.append(run);
-    c.append(lock, el("span", "ws-label", "Try a query"), chips, q, actions, res);
+    const tools = el("div", "ws-tools");
+    tools.append(el("span", "ws-label", "Analysis tools"), el("span", "ws-planned", "Planned"));
+    ["SQL (available now)", "SAS", "PSPP", "R", "Python"].forEach((t, i) => tools.append(el("span", i ? "ws-tool off" : "ws-tool", t)));
+    tools.append(el("p", "ws-note", "Planned: SAS, PSPP, R and Python sessions inside this workspace, with the same rules: no download, only reviewed summary results leave."));
+    c.append(lock, el("span", "ws-label", "Try a query"), chips, q, actions, res, tools);
     return c;
   }
 

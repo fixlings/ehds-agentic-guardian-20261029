@@ -289,6 +289,11 @@ pre.sql { white-space: pre-wrap; font-size: 11px; background: #f1f6fd; padding: 
 .ws-chip:hover { background: #173d66; }
 .ws-sql { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 12px; background: #081a33; color: #e5f0ff; border: 1px solid #2c4c75; border-radius: 8px; padding: 10px; }
 .ws-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.ws-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px solid #27466f; padding-top: 12px; }
+.ws-tools .ws-note { flex-basis: 100%; margin: 0; }
+.ws-planned { background: #f5b942; color: #3a2600; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.ws-tool { border: 1px solid #3f6aa3; border-radius: 999px; padding: 5px 11px; font-size: 12px; color: #dce8fb; }
+.ws-tool.off { border-style: dashed; color: #8fa6c6; }
 .ws-lock { border: 1px solid #b4485a; background: rgba(180, 72, 90, .15); color: #ffd6dc; border-radius: 8px; padding: 10px 12px; font-size: 13px; font-weight: 650; }
 .ws-danger { border-radius: 8px; padding: 10px 14px; background: transparent; color: #ffb4bd; border: 1px solid #b4485a; font-size: 12px; font-weight: 780; cursor: pointer; }
 .ws-result { background: #fff; color: var(--ink); border-radius: 10px; padding: 4px 12px; }

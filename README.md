@@ -60,6 +60,8 @@ Tests: `make test` (offline, network blocked; the AI is replaced by a fake model
 
 ## Known limitations
 
+- **Workspace tools:** only read-only SQL today. SAS, PSPP, R and Python sessions inside the workspace are planned (shown as "Planned" in the UI), under the same no-download, summary-only rules.
+
 - Roles are self-declared; no logins.
 - Differencing protection compares pairs of released groups per organisation and is kept in memory (reset on restart); it does not catch sums over many requests or collusion between organisations.
 - The AI's judgement can vary slightly between models; the official metrics are measured with rules only (`make eval`) and checked again with the AI on.
