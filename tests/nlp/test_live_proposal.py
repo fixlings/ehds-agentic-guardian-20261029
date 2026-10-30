@@ -27,7 +27,7 @@ class _Proposal:
         return self.payload
 
 
-def test_validated_proposal_replaces_model_display_and_drops_invented_code() -> None:
+def test_validated_proposal_replaces_model_display() -> None:
     client = _Proposal(
         {
             "proposed_purpose": "public_health_research",
@@ -49,14 +49,7 @@ def test_validated_proposal_replaces_model_display_and_drops_invented_code() -> 
                             "display": "bad boob cancer",
                             "source_text": "bad boob cancer",
                             "negated": False,
-                        },
-                        {
-                            "system": "ICD-10",
-                            "code": "XYZ999",
-                            "display": "invented",
-                            "source_text": "supercancer",
-                            "negated": False,
-                        },
+                        }
                     ],
                 },
             },
@@ -71,10 +64,42 @@ def test_validated_proposal_replaces_model_display_and_drops_invented_code() -> 
     assert client.models == [DEFAULT_MODEL]
     assert result.query is not None
     assert result.proposed_purpose == PurposeCategory.public_health_research
-    codes = {(item.code, item.display, item.source_text) for item in result.query.filters.coded}
-    assert ("C50", "Malignant neoplasm of breast", "bad boob cancer") in codes
-    assert "XYZ999" not in {item.code for item in result.query.filters.coded}
+    coded = result.query.filters.coded[0]
+    assert coded.code == "C50"
+    assert coded.display == "Malignant neoplasm of breast"
+    assert coded.source_text == "bad boob cancer"
     assert "sql" not in result.query.model_dump()
+
+
+def test_invented_code_does_not_widen_the_cohort() -> None:
+    """An unlisted code must not fall through to a broader permitted filter such as sex."""
+    client = _Proposal(
+        {
+            "proposed_purpose": "public_health_research",
+            "needs_clarification": False,
+            "query": {
+                "measures": ["count"],
+                "filters": {
+                    "sex": "female",
+                    "coded": [
+                        {
+                            "system": "ICD-10",
+                            "code": "XYZ999",
+                            "display": "supercancer",
+                            "source_text": "supercancer",
+                            "negated": False,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+    interpreter = Interpreter(client=client, propose_query=True)
+    result = interpreter.interpret("women with supercancer", _session())
+    assert interpreter.validated_live_response is False
+    assert result.needs_clarification is True
+    assert result.query is None
+    assert "XYZ999" not in result.model_dump_json()
 
 
 def test_sql_proposal_is_a_safe_refusal() -> None:
@@ -95,6 +120,17 @@ def test_sql_proposal_is_a_safe_refusal() -> None:
     assert result.needs_clarification is True
     assert result.query is None
     assert "select * from patients" not in result.model_dump_json()
+
+
+def test_flag_merge_model_error_is_not_a_successful_interpretation() -> None:
+    interpreter = Interpreter(client=_Proposal(RuntimeError("timeout")), propose_query=False)
+    try:
+        interpreter.interpret("How many women have breast cancer?", _session())
+    except ModelCallError as exc:
+        assert str(exc) == "EU Mistral did not return JSON"
+        assert interpreter.validated_live_response is False
+        return
+    raise AssertionError("a failed flag call must not return the lexicon interpretation")
 
 
 def test_model_exception_is_not_swallowed() -> None:

@@ -199,7 +199,7 @@ def main(argv: list[str] | None = None) -> None:
     if live:
         print("DEMO_OK live EU Mistral mistral-small-2603, synthetic data only")
     else:
-        print("DEMO_OK offline mocked Mistral, synthetic data only")
+        print("DEMO_OK offline, no model call, synthetic data only")
 
 
 if __name__ == "__main__":

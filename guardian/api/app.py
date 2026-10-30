@@ -1,7 +1,7 @@
 """HTTP adapter for POST /v1/agent/request.
 
-The default app is offline. Set EHDS_USE_MISTRAL=1 and call create_app()
-with use_env_model=True to use the EU Mistral host. The demo script stays mocked.
+The default app is offline and calls no language model.
+create_app(use_env_model=True) calls Mistral mistral-small-2603 on https://api.eu.mistral.ai.
 """
 
 from __future__ import annotations

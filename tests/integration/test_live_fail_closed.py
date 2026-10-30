@@ -91,6 +91,45 @@ def test_validated_live_proposal_reports_live_model_and_lexicon_display() -> Non
     assert "select " not in response.text.lower()
 
 
+def test_invented_code_does_not_widen_the_cohort() -> None:
+    client = RecordingClient(
+        {
+            "proposed_purpose": "public_health_research",
+            "needs_clarification": False,
+            "query": {
+                "measures": ["count"],
+                "filters": {
+                    "sex": "female",
+                    "coded": [
+                        {
+                            "system": "ICD-10",
+                            "code": "XYZ999",
+                            "display": "supercancer",
+                            "source_text": "supercancer",
+                            "negated": False,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+    response = TestClient(create_app(client=client)).post(
+        ROUTE_PATH,
+        json={
+            "message": "women with supercancer",
+            "role": "public_health_researcher",
+            "stated_purpose": "Public-health surveillance of cancer prevalence",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["decision"] == "clarify"
+    assert body["aggregate"] is None
+    assert body["live_model"] is False
+    assert body["interpretation"]["query"] is None
+    assert "XYZ999" not in response.text
+
+
 def test_schema_rejection_does_not_execute_sql() -> None:
     client = RecordingClient(
         {

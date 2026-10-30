@@ -187,8 +187,10 @@ def test_mistral_client_rejects_non_eu_host() -> None:
 
 def _fail_live(exc: BaseException, api_key: str) -> None:
     if api_key and (api_key in str(exc) or api_key in repr(exc)):
-        pytest.fail("Live EU Mistral call failed. Credential redacted from this message.")
-    pytest.fail(f"Live EU Mistral call failed ({type(exc).__name__}).")
+        message = "Live EU Mistral call failed. Credential redacted from this message."
+    else:
+        message = f"Live EU Mistral call failed ({type(exc).__name__})."
+    raise AssertionError(message) from None
 
 
 @pytest.mark.live

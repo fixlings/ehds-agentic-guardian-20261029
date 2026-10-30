@@ -147,7 +147,9 @@ class Interpreter:
                 timeout_s=MODEL_TIMEOUT_S,
             )
         except Exception:
-            return base
+            raise ModelCallError("EU Mistral did not return JSON") from None
+        if not isinstance(raw, dict):
+            raise ModelCallError("EU Mistral did not return a JSON object")
 
         out = dict(base)
         purpose = raw.get("proposed_purpose")
@@ -302,13 +304,11 @@ class Interpreter:
             (row["system"], row["code"]): row for row in self._normalizer.lexicon()["codes"]
         }
         cleaned: list[CodedFilter] = []
-        invented = False
         folded_message = message.casefold()
         for coded in query.filters.coded:
             row = allowed.get((coded.system.value, coded.code))
             if row is None:
-                invented = True
-                continue
+                raise _ProposalRejected("model code is not allowlisted")
             source = coded.source_text.strip()
             if not source or source.casefold() not in folded_message:
                 source = row["aliases"][0]
@@ -321,10 +321,6 @@ class Interpreter:
                     negated=bool(coded.negated),
                 )
             )
-        if invented and not cleaned and not _has_population_constraint(
-            query.filters.model_copy(update={"coded": []})
-        ):
-            raise _ProposalRejected("model code is not allowlisted")
         filters = query.filters.model_copy(update={"coded": cleaned})
         return query.model_copy(update={"filters": filters})
 
