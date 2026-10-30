@@ -299,7 +299,7 @@ pre.sql { white-space: pre-wrap; font-size: 11px; background: #f1f6fd; padding: 
 .ws-result { background: #fff; color: var(--ink); border-radius: 10px; padding: 4px 12px; }
 .ws-result:empty { display: none; }
 .ws-blocked { color: #a52234; font-weight: 700; }
-.staff-toolbar { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; align-items: center; margin: 14px 0 6px; }
+.staff-toolbar { display: grid; grid-template-columns: 2fr 1fr 1fr auto auto; gap: 10px; align-items: center; margin: 14px 0 6px; }
 .staff-toolbar input[type=search], .staff-toolbar select { width: 100%; box-sizing: border-box; }
 .staff-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .staff-table td:last-child { font-weight: 500; color: inherit; }
@@ -308,6 +308,9 @@ pre.sql { white-space: pre-wrap; font-size: 11px; background: #f1f6fd; padding: 
 .s-row { cursor: pointer; }
 .s-row:hover, .s-row:focus { background: #f1f7ff; outline: none; }
 .s-id { font-weight: 800; color: #164a82; white-space: nowrap; }
+.s-appeal { color: #a52234; font-weight: 800; white-space: nowrap; }
+.s-row:has(.s-appeal) { background: #fff4f5; }
+.appeal-text { width: 100%; box-sizing: border-box; border: 1px solid #d5e2f1; border-radius: 8px; padding: 10px 12px; font: inherit; margin: 6px 0 10px; }
 .s-flag { color: #93610a; font-weight: 750; white-space: nowrap; }
 .pill { display: inline-block; border-radius: 999px; padding: 4px 9px; font-size: 11px; font-weight: 800; white-space: nowrap; background: #e9f6f0; color: #076a53; }
 .pill-REJECT { background: #ffe8eb; color: #a52234; }

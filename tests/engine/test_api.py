@@ -108,3 +108,20 @@ def test_workspace_shows_summaries_only(client):
     for sql in ["SELECT * FROM cohort", "SELECT * FROM conditions LIMIT 5",
                 "SELECT max(patient_id) AS x FROM cohort", "SELECT patient_id, count(*) FROM conditions GROUP BY patient_id"]:
         assert client.post("/v1/workspaces/R05/query", json={"sql": sql}).status_code == 403, sql
+
+
+def test_rejected_request_can_ask_for_manual_review(client):
+    from server import api
+
+    api.HISTORY.clear()
+    rej = client.post("/v1/requests", json=_req("R02")).json()
+    ok = client.post("/v1/requests", json=_req("R01")).json()
+    assert rej["decision"] == "REJECT" and ok["decision"] != "REJECT"
+    assert client.post(f"/v1/requests/{ok['seq']}/appeal", json={"comment": "x"}).status_code == 409
+    assert client.post(f"/v1/requests/{rej['seq']}/appeal", json={"comment": "We are a university."}).status_code == 200
+    assert client.post(f"/v1/requests/{rej['seq']}/appeal", json={}).status_code == 409
+    assert client.post("/v1/requests/999/appeal", json={}).status_code == 404
+    rows = {r["seq"]: r for r in client.get("/v1/staff/requests").json()}
+    assert rows[rej["seq"]]["appeal"] and not rows[ok["seq"]]["appeal"]
+    detail = client.get(f"/v1/staff/requests/{rej['seq']}").json()
+    assert detail["appeal"]["comment"] == "We are a university."

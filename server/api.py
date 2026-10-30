@@ -81,7 +81,27 @@ def _summary(e: dict) -> dict:
             "organisation": (req.get("applicant") or {}).get("organisation", ""),
             "country": (req.get("applicant") or {}).get("country", ""),
             "purpose": str(req.get("purpose", ""))[:240], "asked": "Records" if records else "Statistics",
-            "decision": out.get("decision"), "flags": len(flags)}
+            "decision": out.get("decision"), "flags": len(flags), "appeal": bool(e.get("appeal"))}
+
+
+class AppealBody(BaseModel):
+    comment: str = ""
+
+
+@router.post("/requests/{seq}/appeal")
+def appeal(seq: int, body: AppealBody) -> dict:
+    """The applicant asks a person to review a rejection. It shows up on the Staff desk."""
+    if not 1 <= seq <= len(HISTORY):
+        raise HTTPException(404, "Unknown request.")
+    e = HISTORY[seq - 1]
+    if e["result"].get("decision") != "REJECT":
+        raise HTTPException(409, "Only rejected requests can be sent for manual review.")
+    if e.get("appeal"):
+        raise HTTPException(409, "Manual review was already requested.")
+    e["appeal"] = {"comment": body.comment.strip()[:2000],
+                   "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    audit.log("manual_review_requested", request=e["result"].get("id"), seq=seq)
+    return {"status": "requested", "seq": seq}
 
 
 @router.get("/staff/requests")

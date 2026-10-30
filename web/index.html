@@ -6,8 +6,8 @@
   <meta name="color-scheme" content="light">
   <meta name="description" content="A plain-language interface for the EHDS Track 3 synthetic research demonstration.">
   <title>Health Data Navigator · EHDS Track 3</title>
-  <link rel="stylesheet" href="/styles.css?v=6">
-  <script src="/formal.js?v=7" defer></script>
+  <link rel="stylesheet" href="/styles.css?v=8">
+  <script src="/formal.js?v=8" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -105,6 +105,7 @@
             <select id="s-decision" aria-label="Decision"><option value="">All decisions</option><option value="REJECT">Rejected</option><option value="APPROVE_STATISTICAL">Approved: statistics</option><option value="APPROVE_SPE">Approved: secure workspace</option></select>
             <select id="s-kind" aria-label="Asked for"><option value="">Statistics and records</option><option value="Statistics">Asked for statistics</option><option value="Records">Asked for records</option></select>
             <label class="check"><input type="checkbox" id="s-review"> Needs review</label>
+            <label class="check"><input type="checkbox" id="s-appeal"> Manual review requested</label>
           </div>
           <div class="staff-meta"><span id="s-count" class="form-note"></span><button id="s-load" class="text-button" type="button">Run all example requests</button></div>
           <section class="result-card staff-table-card">

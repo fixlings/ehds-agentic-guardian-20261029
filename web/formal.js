@@ -47,6 +47,23 @@
     return { status: res.status, body: await res.json().catch(() => ({})) };
   }
 
+  function appealCard(seq) {
+    const c = card("Disagree with this decision?");
+    c.append(el("p", "", "You can ask a staff member of the Health Data Access Body to review your request by hand."));
+    const t = el("textarea", "appeal-text"); t.rows = 3; t.placeholder = "Optional: tell us why the decision should be reviewed.";
+    t.setAttribute("aria-label", "Reason for manual review");
+    const b = el("button", "secondary-button", "Request manual review"); b.type = "button";
+    const msg = el("p", "form-note");
+    b.onclick = async () => {
+      b.disabled = true;
+      const r = await post(`/v1/requests/${seq}/appeal`, { comment: t.value });
+      if (r.status === 200) { t.remove(); b.remove(); msg.textContent = "Sent. A staff member will review your request and contact you."; }
+      else { b.disabled = false; msg.textContent = r.body.detail || `Error ${r.status}`; }
+    };
+    c.append(t, b, msg);
+    return c;
+  }
+
   function renderApplicant(out, req = {}) {
     const section = $("formal-result");
     section.hidden = false;
@@ -61,6 +78,7 @@
     body.append(letter);
     letter.append(el("p", "form-note", aiSummary(out.ai_check)));
     if (req.requested_as === "health data access application" && out.decision === "APPROVE_STATISTICAL") letter.append(el("p", "form-note", "You asked for records in a secure workspace. You receive statistics instead, because the request does not explain why statistics are not enough."));
+    if (out.decision === "REJECT" && out.seq) body.append(appealCard(out.seq));
     if (out.answer && out.answer.error) { const e = card("Not processed", true); e.append(el("p", "", out.answer.error)); body.append(e); return; }
     if (out.decision === "APPROVE_STATISTICAL") {
       const c = card("Privacy-protected statistics");
@@ -155,10 +173,15 @@
     return c;
   }
 
-  function renderStaff(out, req, received) {
+  function renderStaff(out, req, received, appeal) {
     const body = $("staff-body");
     body.replaceChildren();
     const s = out.staff || {};
+    if (appeal) {
+      const a = card("Manual review requested by the applicant", true);
+      a.append(el("p", "", appeal.comment ? `“${appeal.comment}”` : "No comment given."), el("p", "form-note", `Requested ${new Date(appeal.at).toLocaleString()}.`));
+      body.append(a);
+    }
     body.append(requestCard(req || {}, received), decisionCard(out));
     const steps = card("How the decision was made");
     const ol = el("ol", "staff-steps");
@@ -209,9 +232,9 @@
 
   function drawStaff() {
     const q = $("s-search").value.toLowerCase().trim();
-    const dec = $("s-decision").value, kind = $("s-kind").value, rev = $("s-review").checked;
+    const dec = $("s-decision").value, kind = $("s-kind").value, rev = $("s-review").checked, app = $("s-appeal").checked;
     const rows = staffRows.filter((r) => (!q || `${r.id} ${r.organisation} ${r.purpose}`.toLowerCase().includes(q))
-      && (!dec || r.decision === dec) && (!kind || r.asked === kind) && (!rev || r.flags > 0));
+      && (!dec || r.decision === dec) && (!kind || r.asked === kind) && (!rev || r.flags > 0 || r.appeal) && (!app || r.appeal));
     $("s-count").textContent = `${rows.length} of ${staffRows.length} requests`;
     const tb = $("s-rows");
     tb.replaceChildren();
@@ -222,7 +245,7 @@
       const org = el("td"); org.append(el("b", "", r.organisation || "—"), el("small", "", r.purpose));
       const d = el("td"); d.append(pill(r.decision));
       tr.append(el("td", "", new Date(r.received).toLocaleTimeString()), el("td", "s-id", r.id), org, el("td", "", r.asked), d,
-        el("td", r.flags ? "s-flag" : "", r.flags ? `${r.flags} flag${r.flags > 1 ? "s" : ""}` : "—"));
+        el("td", r.appeal ? "s-appeal" : r.flags ? "s-flag" : "", [r.appeal ? "Manual review requested" : "", r.flags ? `${r.flags} flag${r.flags > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ") || "—"));
       tb.append(tr);
     });
     $("s-empty").hidden = rows.length > 0;
@@ -230,7 +253,7 @@
 
   async function openStaff(seq) {
     const e = await (await fetch(`/v1/staff/requests/${seq}`)).json();
-    renderStaff(e.result, e.request, e.received);
+    renderStaff(e.result, e.request, e.received, e.appeal);
     showView("staff");
     $("staff-list").hidden = true;
     $("staff-detail").hidden = false;
@@ -408,7 +431,7 @@
     document.querySelectorAll(".nav-button").forEach((b) => { b.onclick = () => { showView(b.dataset.view); if (b.dataset.view === "staff") showList(); }; });
     $("staff-back").onclick = showList;
     $("s-search").oninput = drawStaff;
-    ["s-decision", "s-kind", "s-review"].forEach((id) => { $(id).onchange = drawStaff; });
+    ["s-decision", "s-kind", "s-review", "s-appeal"].forEach((id) => { $(id).onchange = drawStaff; });
     $("s-load").onclick = async () => {
       $("s-load").disabled = true; $("s-count").textContent = "Running the example requests…";
       for (const smp of samples) await post("/v1/requests", smp);
