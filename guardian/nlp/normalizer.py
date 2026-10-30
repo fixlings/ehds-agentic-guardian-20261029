@@ -46,9 +46,6 @@ class Normalizer:
     def __init__(self, lexicon: dict) -> None:
         self._lex = lexicon
         self._negation_cues = [self._fold(c) for c in lexicon["negation_cues"]]
-        if "not" not in self._negation_cues:
-            # P22 ("BMI is not obese"): standalone "not" is absent from lexicon negation_cues.
-            self._negation_cues.append("not")
         self._unknown_code_re = re.compile(lexicon["unknown_code_pattern"])
         self._generic = [self._fold(g) for g in lexicon["generic_unresolved"]]
         self._allowlisted_codes = {
@@ -147,16 +144,31 @@ class Normalizer:
         selected.sort(key=lambda x: x[0])
         return selected
 
+    def _boundary_cue_end(self, window: str, cue: str) -> int | None:
+        """End index of the rightmost whole-token match of `cue` in `window`."""
+        search_end = len(window)
+        while search_end > 0:
+            idx = window.rfind(cue, 0, search_end)
+            if idx == -1:
+                return None
+            end = idx + len(cue)
+            before_ok = idx == 0 or not _is_word_char(window[idx - 1])
+            after_ok = end >= len(window) or not _is_word_char(window[end])
+            if before_ok and after_ok:
+                return end
+            search_end = idx
+        return None
+
     def _is_negated(self, folded_message: str, start: int) -> bool:
         window = folded_message[max(0, start - 80) : start]
         for sep in (",", ";", " und ", " and "):
             if sep in window:
                 window = window.rsplit(sep, 1)[-1]
         for cue in sorted(self._negation_cues, key=len, reverse=True):
-            idx = window.rfind(cue)
-            if idx == -1:
+            end = self._boundary_cue_end(window, cue)
+            if end is None:
                 continue
-            between = window[idx + len(cue) :].strip()
+            between = window[end:].strip()
             if not between or len(between.split()) <= 6:
                 return True
         return False

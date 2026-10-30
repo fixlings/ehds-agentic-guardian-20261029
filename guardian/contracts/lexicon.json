@@ -75,7 +75,7 @@
     }
   ],
   "regions": ["Wien", "Ost", "Süd", "West", "Nord"],
-  "negation_cues": ["not including", "without", "ohne", "nicht", "nich", "kein", "keine", "excluding"],
+  "negation_cues": ["not including", "without", "ohne", "nicht", "nich", "kein", "keine", "excluding", "not"],
   "negated_sex_flips": true,
   "measure_cues": [
     {"measure": "rate_per_1000", "aliases": ["per 1000", "pro 1000"]},

@@ -11,6 +11,11 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 pytest
+python scripts/demo_three_scenarios.py
 ```
 
-Status: contracts published; component packages are in progress. Do not treat this checkout as demo-ready.
+On Windows PowerShell, use `.venv\Scripts\python.exe` for the same commands. The three-scenario demo is offline and does not call Mistral. The spoken script is `scripts/demo_90s.md`.
+
+Live EU Mistral is optional: install the package, set `MISTRAL_API_KEY` without printing it, and run `pytest -m live`. The default HTTP app stays mocked. `create_app(use_env_model=True)` uses `https://api.eu.mistral.ai` only.
+
+Status: rescue integration on `rescue/ehds-integration-20261030`. Synthetic data only. Do not connect this demo to a production record system.
