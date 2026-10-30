@@ -15,3 +15,7 @@ CANDIDATE_MODEL = "mistral-medium-3-5"
 
 # Official Track 3 rule: counts below 10 are shown as "<10".
 TRACK3_SUPPRESSION_THRESHOLD = 10
+
+# Optional switch (EHDS_LLM_PROVIDER=openrouter): hackathon OpenRouter key. Not EU-only.
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENROUTER_DEFAULT_MODEL = "mistralai/mistral-small-3.2-24b-instruct"

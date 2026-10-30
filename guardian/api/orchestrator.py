@@ -125,7 +125,7 @@ class Orchestrator:
             policy,
             interpretation,
             evidence,
-            live_note="Interpreted by EU Mistral (mistral-small-2603)." if live_validated else None,
+            live_note=f"Interpreted by {self._model_label()}." if live_validated else None,
         )
         limitations = _limitations(decision, evidence, request.dataset_id)
         audit = self._audit(
@@ -156,7 +156,7 @@ class Orchestrator:
             explanation=explanation,
             audit_id=audit.audit_id,
             limitations=limitations,
-            model=DEFAULT_MODEL if live_validated else None,
+            model=self._model_id() if live_validated else None,
             tool_steps=tool_steps,
             latency_ms=elapsed_ms,
             live_model=live_validated,
@@ -167,8 +167,15 @@ class Orchestrator:
             models = self._client.list_models()
         except Exception:
             raise ModelUnavailableError("EU Mistral endpoint is unavailable") from None
-        if not models or DEFAULT_MODEL not in models:
-            raise ModelUnavailableError("Required EU model is unavailable")
+        if not models or self._model_id() not in models:
+            raise ModelUnavailableError("Required model is unavailable")
+
+    def _model_id(self) -> str:
+        return getattr(self._client, "model_id", DEFAULT_MODEL)
+
+    def _model_label(self) -> str:
+        provider = getattr(self._client, "provider_label", "EU Mistral")
+        return f"{provider} ({self._model_id()})"
 
     def _audit_model_failure(self, request: AgentRequest, session) -> None:
         policy = PolicyDecision(

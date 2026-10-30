@@ -7,6 +7,7 @@ create_app(use_env_model=True) calls Mistral mistral-small-2603 on https://api.e
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -32,9 +33,7 @@ def create_app(
 ) -> FastAPI:
     if orchestrator is None:
         if client is None and use_env_model:
-            from guardian.nlp.mistral_client import MistralEuClient
-
-            client = MistralEuClient()
+            client = _env_client()
         orchestrator = Orchestrator(client=client)
     app = FastAPI(title="EHDS agentic guardian", version="0.1.0")
     app.state.orchestrator = orchestrator
@@ -66,6 +65,18 @@ def create_app(
         return JSONResponse(status_code=200, content=result.model_dump(mode="json"))
 
     return app
+
+
+def _env_client():
+    """EHDS_LLM_PROVIDER=mistral_eu (default, EU-only) or openrouter (not EU-only)."""
+    provider = os.getenv("EHDS_LLM_PROVIDER", "mistral_eu").strip().lower()
+    if provider == "openrouter":
+        from guardian.nlp.openrouter_client import OpenRouterClient
+
+        return OpenRouterClient()
+    from guardian.nlp.mistral_client import MistralEuClient
+
+    return MistralEuClient()
 
 
 def _error(status: int, error: str, message: str, session_id: str | None = None) -> JSONResponse:

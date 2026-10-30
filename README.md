@@ -66,6 +66,17 @@ py -3.12 -m venv .venv
 
 Video script: `docs/video_script.md`.
 
+### Live language model (optional)
+
+The chat works offline by default (word lists, no model). To let a model read the chat questions:
+
+| Provider | Settings | Data location |
+|---|---|---|
+| Mistral EU (default) | `EHDS_USE_LIVE_MODEL=1`, `MISTRAL_API_KEY` | EU only (`api.eu.mistral.ai`) |
+| OpenRouter (hackathon key) | `EHDS_USE_LIVE_MODEL=1`, `EHDS_LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, optional `EHDS_LLM_MODEL` (default `mistralai/mistral-small-3.2-24b-instruct`) | **Not EU-only.** Requests ask OpenRouter for providers that don't store prompts (`data_collection: deny`) |
+
+Either way only the question text, stated purpose and role are sent; patient data never leaves the app, and the model's proposal is validated locally before rules decide. Keys are read from the environment only, never from the browser or files.
+
 ## Known limitations
 
 - Roles are self-declared; there are no real logins.
