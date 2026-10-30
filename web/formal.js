@@ -116,7 +116,7 @@
       if (r.status !== 200) { res.replaceChildren(el("p", "ws-blocked", `Blocked: ${r.body.detail}`)); return; }
       res.replaceChildren(table(r.body.columns, r.body.rows), el("p", "form-note", `${r.body.total_rows} rows${r.body.total_rows > r.body.rows.length ? ` (first ${r.body.rows.length} shown)` : ""}. ${r.body.note}`));
     };
-    const lock = el("div", "ws-lock", "🔒 Download is not possible. There is no export: data and patient IDs never leave this workspace (Art. 73). Only summary results are shown here.");
+    const lock = el("div", "ws-lock", "Download is not possible. There is no export: data and patient IDs never leave this workspace (Art. 73). Only summary results are shown here.");
     const actions = el("div", "ws-actions"); actions.append(run);
     c.append(lock, el("span", "ws-label", "Try a query"), chips, q, actions, res);
     return c;
