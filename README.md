@@ -1,10 +1,8 @@
 # Health Data Navigator
 
-- **Works:** all 10 official requests are correct. The app catches subtraction attacks (answers that differ by 1–9 patients) for one organisation name, catches purpose changes, and provides a locked workspace with no download.
-- **Not yet:** no logins. The memory resets on restart and is keyed by organisation name. Some new question types (per-hospital results, inpatient stays filtered by diagnosis) can return a wrong number, without a warning to staff.
-- **Next:** logins, a shared permanent memory, broader question understanding, and hiding related values when a count is held back.
-
-No API key needed. Rules-only mode reaches all official metrics.
+- **Works:** All 10 official requests are correct. The app catches subtraction attacks within an organisation, catches purpose changes, and provides a locked workspace with no download.
+- **Not yet:** No logins. The Guardian's memory is per organisation name and resets on restart. Some new question types (e.g. per hospital) are not understood.
+- **Next:** Logins, a shared permanent memory, and broader question understanding.
 
 ---
 
@@ -16,17 +14,19 @@ Most data-access tools judge each answer on its own. Ours also thinks like an at
 
 Every access body hides groups smaller than 10. But two harmless-looking questions can still expose patients:
 
-<p align="center"><img src="docs/img/differencing-leak.svg" width="640" alt="Women with breast cancer in Austria: 114. Same, without Burgenland: 112. 114 minus 112 equals 2 patients in Burgenland exposed."></p>
+<p align="center"><img src="docs/img/differencing-leak.svg" width="520" alt="114 women with breast cancer in Austria minus 112 outside Burgenland exposes two patients"></p>
 
 A rule-following tool releases both answers. Our **Guardian** compares each new answer with the earlier ones from the same organisation. If the two differ by only 1–9 patients, it holds the new answer back.
 
-<p align="center"><img src="docs/media/gif-1-leak.gif" width="640" alt="Demo: D10 returns 114 women; D11 (without Burgenland) is held back, and the staff view shows the differencing flag"></p>
+<p align="center"><img src="docs/media/gif-1-leak.gif" width="640" alt="Demo D10 then D11: the second count is held back and staff see a differencing flag"></p>
+<p align="center"><sub>Both counts are above 10. Together they reveal two patients.</sub></p>
 
 ### 2. It notices when the purpose changes
 
 A team approved for research returns asking for records to set insurance premiums, a use EHDS law forbids. The Guardian connects the two requests, rejects the second under Art. 54 and alerts staff.
 
-<p align="center"><img src="docs/media/gif-2-purpose.gif" width="640" alt="Demo: D06 research is approved; the same team then asks for insurance premiums in D08, which is rejected under Article 54, and staff see a purpose-change flag"></p>
+<p align="center"><img src="docs/media/gif-2-purpose.gif" width="640" alt="Demo D06 then D08: same team, insurance purpose, rejected under Article 54 with a staff alert"></p>
+<p align="center"><sub>Same team, new purpose. The Guardian connects the two requests.</sub></p>
 
 ### 3. It tells researchers what the numbers cannot prove
 
@@ -36,18 +36,19 @@ A team approved for research returns asking for records to set insurance premium
 
 ## How it works
 
-<p align="center"><img src="docs/img/flow.svg" width="640" alt="Request, then Guardian before calculating (purpose, history), Calculate, Guardian before releasing (small groups, overlaps), Evidence (what the numbers can and cannot show), Answer. Every request ends as Rejected, Anonymous statistics or Secure workspace."></p>
+<p align="center"><img src="docs/img/flow.svg" width="720" alt="Request, Guardian, Calculate, Guardian, Evidence, Answer"></p>
 
 Every request ends in one of three outcomes, each backed by the relevant EHDS article:
 - **rejected**;
 - **anonymous statistics**;
 - **a secure workspace**, where approved researchers can analyse coded records and nothing can be downloaded.
 
-<p align="center"><img src="docs/media/gif-3-workspace.gif" width="640" alt="Demo: D09 opens a secure workspace with 313 patients under Articles 53, 66, 68 and 73; a summary query runs; a download call to the API returns 403; the audit log shows download_blocked"></p>
+<p align="center"><img src="docs/media/gif-3-workspace.gif" width="640" alt="Demo D09: secure workspace with the exact patient count, a summary query, download blocked with 403, and the audit log entry"></p>
+<p align="center"><sub>Records can be analysed, never downloaded.</sub></p>
 
 Staff see every step, can review rejections, and every action is written to a tamper-evident audit log.
 
-<p align="center"><img src="docs/media/staff-view.png" width="640" alt="Staff view with four numbered parts: 1 generated SQL, 2 term-to-code mapping (breast cancer to ICD-10 C50), 3 Guardian flags, 4 hash-chained audit log"></p>
+<p align="center"><img src="docs/media/staff-view.png" width="640" alt="Staff view with generated SQL, term-to-code mapping, Guardian flags and the audit log"></p>
 <p align="center"><sub>Staff see every step.</sub></p>
 
 ---
@@ -80,17 +81,15 @@ These are reworded bad requests (demo D01–D05), measured in the app:
 
 ## Results on the official test
 
-Measured on a fresh clone (Linux, Python 3.11):
+Measured on a fresh clone in rules-only mode (`EHDS_AI_CHECK=0 make eval`):
 
 | Check | Result |
 |---|---|
-| Correct decisions (`EHDS_AI_CHECK=0 make eval`) | **10 / 10** |
+| Correct decisions | **10 / 10** |
 | Correct numbers | **6 / 6** |
 | Privacy leaks | **0** |
 | Same answer on every run | **10 / 10** |
-| Slowest answer (limit 60 s) | **1.6 s** rules only · with AI typically 10–30 s, slowest seen 38 s |
-| `make test` | **75 passed** |
-| `make lint` | fails: `ruff` is not in `requirements.txt`; after `pip install ruff` it reports 38 findings |
+| Slowest answer (limit 60 s) | **0.8 s** rules only · with AI typically 10–22 s, **slowest seen 38 s** |
 
 ---
 
@@ -172,9 +171,8 @@ Run D06–D08 and D10–D11 in order, without restarting the app.
 - **Some new question types are not understood yet.**
   - Inpatient stays filtered by `primary_icd10` per region (tested as D12) return one wrong total (3,210) instead of a table. The correct total is 72 hip-fracture stays in 2024.
   - Grouping by data holder (tested as D13) returns one total (1,152) instead of one row per hospital.
-  - For D12 and D13 staff see no warning.
-  - Other gaps include stays per year, "active" prescriptions, and an age given only in a definition line.
+  - Other gaps: stays per year, "active" prescriptions, and an age given only in a definition line. In these cases staff only see a flag.
 - **No authentication.** Roles are self-declared, and the staff endpoints, including "allow" after review, are open.
-- **Timing with the AI on:** typically 10–30 s per request, slowest seen 38 s. Rules only: under 2 s.
+- **Timing with the AI on:** typically 10–22 s per request, slowest seen 38 s. Rules only: under 1 s.
 
 </details>
