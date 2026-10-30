@@ -105,7 +105,11 @@ def review(req: dict, client=None, earlier: list[dict] | None = None) -> dict:
                 client = OpenRouterClient(timeout_s=25)
         raw = client.complete_json(model="", system=SYSTEM, user=user)
     except Exception as exc:  # noqa: BLE001 — model outage must never block the rules
-        return {"status": "unavailable", "error": type(exc).__name__}
+        failure = {"status": "unavailable", "error": type(exc).__name__}
+        status_code = getattr(getattr(exc, "response", None), "status_code", None)
+        if isinstance(status_code, int):
+            failure["http_status"] = status_code  # safe to show; never include provider response or key
+        return failure
     text = _norm(json.dumps(payload(req), ensure_ascii=False).replace('\\"', '"'))
     quote = str(raw.get("prohibited_quote") or "")
     checks = []
