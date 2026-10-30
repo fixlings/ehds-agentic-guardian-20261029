@@ -74,6 +74,13 @@ def decision_steps(req: dict, out: dict) -> list[dict]:
     """The rule checks in the order the README prescribes, with evidence."""
     text = " ".join([req.get("purpose", ""), req.get("question", "")])
     steps = []
+    ai = out.get("ai_check") or {}
+    if ai.get("status") == "ok":
+        verdict = f"forbidden: {ai['category']}" if ai["prohibited"] else f"purpose: {ai['allowed_purpose']}"
+        steps.append({"check": f"AI check ({ai['model']})", "ok": not ai["prohibited"],
+                      "result": f"{verdict}. {ai['reason']}", "evidence": f'"{ai["quote"]}"' if ai["quote"] else ""})
+    else:
+        steps.append({"check": "AI check", "ok": True, "result": ai.get("status", "off") + ": rules decide alone", "evidence": ""})
     hits = judge.prohibited_hits(text)
     steps.append({"check": "Forbidden purpose? (Art. 54)", "ok": not hits,
                   "result": "Yes: " + "; ".join(h["label"] for h in hits) if hits else "No",
@@ -83,6 +90,9 @@ def decision_steps(req: dict, out: dict) -> list[dict]:
     allowed = [label for pat, label in judge.ALLOWED_PURPOSE_HINTS if re.search(pat, text, re.I)]
     steps.append({"check": "Allowed purpose (Art. 53)", "ok": bool(allowed),
                   "result": ", ".join(dict.fromkeys(allowed)) or "not clearly recognised", "evidence": ""})
+    if not allowed or out.get("decision") == "REJECT":
+        steps.append({"check": "Decision", "ok": False, "result": out.get("reason", ""), "evidence": ""})
+        return steps
     kind = req.get("requested_as", "")
     steps.append({"check": "What was asked for?", "ok": True,
                   "result": "Statistics (health data request)" if kind == "health data request"

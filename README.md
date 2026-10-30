@@ -1,91 +1,57 @@
 # EHDS Track 3: Health Data Navigator
 
-One app with two ways in and the same rules behind both, built for the AIM Austria EHDS hackathon (Track 3).
+Health data access body for the AIM Austria EHDS hackathon (Track 3): a request comes in, an AI model and fixed rules check it, the app decides, cites the law, and returns privacy-protected numbers or opens a secure workspace.
 
 | Metric (official `requests/expected.json`) | Result |
 |---|---|
-| Correct decisions | 10/10 |
+| Correct decisions | 10/10 (rules alone and with AI check) |
 | Correct numbers | 6/6 |
 | Privacy leaks | 0 |
 | Consistency | 10/10 |
-| Slowest request | < 1 s |
+| Slowest request | < 1 s rules only, ~3 s with AI check |
 
-Reproduce with `make eval` (or `python -m ehds.evaluate`).
+Reproduce with `make eval` (rules only, offline).
 
-## Architecture
+## How a request is handled
 
 ```
-Browser (web/)                      FastAPI (navigator_app.py)
- ├─ Submit request  ──►  POST /v1/requests ──► ehds/ rules engine
- │                                              judge → recipe → SQL (DuckDB) → privacy gate
- │                                              or → secure workspace (download blocked)
- │                                              + independent double-check, certificate, sealed audit log
- ├─ Ask a question  ──►  POST /v1/agent/request ──► guardian/
- │                                              interpreter (offline lexicon or LLM proposal, validated)
- │                                              → purpose guardian (rules) → evidence check
- │                                              → Track3QueryExecutor on the same 20,000 patients
- └─ Staff desk      ──►  decision trace, generated SQL, workspace, GET /v1/audit
+Request JSON ──► AI check (purpose, question; no patient data) ─┐
+             └─► Rules (ehds/judge.py) ──────────────────────────┴─► stricter of the two
+                                                                     │
+         REJECT (Art. 54 forbidden use / Art. 53 no allowed purpose) ┤
+         APPROVE_STATISTICAL (Art. 53, 69) ── SQL from definitions ──┤─► "<10" privacy gate ─► numbers
+         APPROVE_SPE (Art. 53, 66, 68, 73) ── secure workspace, download blocked
+                                     all steps ─► Staff desk + hash-chained audit log
 ```
 
-- **Rules decide, AI never does.** The formal route uses no language model. In the chat route a model may only *propose* a structured query; local code validates it, and deterministic rules decide.
-- **Patient data stays inside.** Only the chat question text can go to a model. Opted-out patients are removed in `ehds/data.py` before any query.
-- **Track 3 privacy rules everywhere:** counts below 10 are `<10`, small percentages/means are `suppressed`, every requested group is shown (even empty), halves round up. The chat API no longer returns the exact total population.
-- **Legal articles:** the engine cites EHDS (Regulation (EU) 2025/327) articles 53, 54, 66, 68, 69, 73; the chat guardian attaches the same Art. 53/69 or Art. 54 citation.
-- **Not hard-coded:** queries are generated from each request's definitions (`ehds/recipe.py` → `ehds/engine.py`); plain-English terms map to ICD-10/ATC/LOINC in `ehds/vocab.py`.
-
-| Folder | What it does |
-|---|---|
-| `ehds/` | Track 3 rules engine (from HackathonMedTech): judge, recipe, SQL engine, privacy gate, workspace, reference check, certificate, audit log, evaluation |
-| `guardian/` | Natural-language guardian: interpreter, purpose rules, evidence investigator, API |
-| `guardian/evidence/track3_executor.py` | Connects the guardian to the official data via the `QueryExecutor` port |
-| `guardian/api/requests_api.py` | Formal routes: `/v1/requests`, `/v1/workspaces/{permit}/query|download`, `/v1/audit` |
-| `web/` | Health Data Navigator UI (Submit request, Ask a question, Staff desk) |
-| `data/`, `requests/` | Official Track 3 synthetic data and requests |
+- **The AI can only make a decision stricter.** It can reject a forbidden use (only if it quotes the words from the request) or downgrade records to statistics when no real reason is given. It can never approve what the rules reject. If the model is down, the rules decide alone and staff see that.
+- **Patient data never goes to the AI.** It only sees organisation, purpose, question and request type. Opted-out patients are removed (`ehds/data.py`) before any calculation.
+- **Privacy:** counts below 10 are `<10`, small percentages/means `suppressed`, every requested group shown, halves round up.
+- **Test requests** `requests/demo/D01–D04` (insurer fees, pharma sales reps, "does my neighbour have diabetes", records without a reason) are in the sample list.
 
 ## Run it
 
-Python 3.11+.
-
+Mac/Linux:
 ```bash
-# Mac / Linux
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-make eval          # five metrics
-make test          # all tests, network blocked for the engine tests
-make app           # open http://127.0.0.1:8000
+python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
+make app                 # http://127.0.0.1:8000
 ```
-
+Windows (PowerShell):
 ```powershell
-# Windows PowerShell
-py -3.12 -m venv .venv
-.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.venv\Scripts\python.exe -m ehds.evaluate
-.venv\Scripts\python.exe -m pytest -q
+py -3.12 -m venv .venv; .venv\Scripts\pip install -r requirements.txt
 .venv\Scripts\python.exe -m uvicorn navigator_app:app --port 8000
 ```
+AI check: set `OPENROUTER_API_KEY` before starting (optional `EHDS_LLM_MODEL`, default `mistralai/mistral-small-3.2-24b-instruct`; `EHDS_AI_CHECK=0` turns it off). OpenRouter is **not EU-only**; requests ask for providers that do not store prompts. Without a key the app runs on rules only.
 
-Video script: `docs/video_script.md`.
-
-### Live language model (optional)
-
-The chat works offline by default (word lists, no model). To let a model read the chat questions:
-
-| Provider | Settings | Data location |
-|---|---|---|
-| Mistral EU (default) | `EHDS_USE_LIVE_MODEL=1`, `MISTRAL_API_KEY` | EU only (`api.eu.mistral.ai`) |
-| OpenRouter (hackathon key) | `EHDS_USE_LIVE_MODEL=1`, `EHDS_LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, optional `EHDS_LLM_MODEL` (default `mistralai/mistral-small-3.2-24b-instruct`) | **Not EU-only.** Requests ask OpenRouter for providers that don't store prompts (`data_collection: deny`) |
-
-Either way only the question text, stated purpose and role are sent; patient data never leaves the app, and the model's proposal is validated locally before rules decide. Keys are read from the environment only, never from the browser or files.
+Tests: `make test` (offline, network blocked). Video script: `docs/video_script.md`.
 
 ## Known limitations
 
-- Roles are self-declared; there are no real logins.
-- Small groups are hidden, but not every cross-query differencing attack (72 − 71 = 1) is blocked yet.
-- The offline chat lexicon covers breast cancer, BMI, diabetes and a few codes; the formal route covers the full Track 3 vocabulary.
+- Roles are self-declared; no logins.
+- Subtracting two answers to reveal a hidden small group is not fully blocked.
+- The older chat API (`POST /v1/agent/request`, below) still exists for the colleagues' tests but is not in the UI.
 
----
-
-## Guardian module (original notes)
+## Appendix: guardian module (original notes)
 
 Bolt-on natural-language module for a deterministic EHDS statistics engine. This repository is the whole system: interpreter, evidence investigator, and purpose guardian. It does not connect to a production health record system.
 

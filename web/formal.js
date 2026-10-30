@@ -59,13 +59,15 @@
     letter.append(el("p", "", out.applicant_letter));
     letter.append(el("p", "", `Why: ${out.reason}`));
     body.append(letter);
+    body.append(aiCard(out.ai_check));
+    if (out.answer && out.answer.error) { const e = card("No numbers", true); e.append(el("p", "", out.answer.error)); body.append(e); return; }
     if (out.decision === "APPROVE_STATISTICAL") {
       const c = card("Privacy-protected statistics");
       c.append(answerTable(out.answer));
       if (out.privacy) c.append(el("p", "", `${out.privacy.hidden} of ${out.privacy.cells} cells hidden by the small-group rule (<10).`));
       body.append(c);
     }
-    if (out.decision === "APPROVE_SPE") {
+    if (out.decision === "APPROVE_SPE" && out.workspace) {
       const c = card("Secure processing environment");
       c.append(el("p", "", `Workspace opened for permit ${out.id} with ${out.patient_count} pseudonymised patients. Data types: ${Object.keys(out.record_types || {}).join(", ") || "—"}.`));
       const q = el("textarea", "mono"); q.rows = 2; q.value = "SELECT count(DISTINCT patient_id) AS patients FROM cohort";
@@ -140,17 +142,39 @@
   async function submit() {
     let req;
     try { req = JSON.parse($("formal-json").value); } catch { $("formal-note").textContent = "The request is not valid JSON."; return; }
-    $("formal-note").textContent = "Deciding…";
-    const r = await post("/v1/requests", req);
+    $("formal-note").textContent = "Checking (AI + rules)…";
+    $("formal-run").disabled = true;
+    const r = await post("/v1/requests", req).finally(() => { $("formal-run").disabled = false; });
     if (r.status !== 200) { $("formal-note").textContent = r.body.detail || `Error ${r.status}`; return; }
     last = r.body;
-    $("formal-note").textContent = "Done. Staff desk shows the full trace.";
+    $("formal-note").textContent = "Done. The Staff desk shows the full trace.";
     renderApplicant(last);
     renderStaff(last);
     loadAudit();
   }
 
+  function aiCard(ai) {
+    const c = card("AI check", ai && ai.prohibited);
+    if (!ai || ai.status !== "ok") { c.append(el("p", "", `AI check ${ai ? ai.status : "off"}: the rules decided alone.`)); return c; }
+    c.append(el("p", "", ai.prohibited ? `Forbidden use found: ${ai.category.replaceAll("_", " ")}.` : `No forbidden use found. Purpose: ${ai.allowed_purpose.replaceAll("_", " ")}.`));
+    if (ai.quote) c.append(el("p", "", `Quote: "${ai.quote}" ${ai.quote_verified ? "(found in the request)" : "(not found in the request, ignored)"}`));
+    if (ai.reason) c.append(el("p", "", ai.reason));
+    c.append(el("p", "form-note", `Model: ${ai.model}. It only saw the request text, never patient data.`));
+    return c;
+  }
+
+  function showView(name) {
+    document.querySelectorAll(".page-view").forEach((v) => { v.hidden = v.id !== `view-${name}`; });
+    document.querySelectorAll(".nav-button").forEach((b) => {
+      const on = b.dataset.view === name;
+      b.classList.toggle("active", on);
+      if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
+  }
+
   async function init() {
+    document.querySelectorAll(".nav-button").forEach((b) => { b.onclick = () => showView(b.dataset.view); });
+    fetch("/v1/requests/ai-status").then((r) => r.json()).then((s) => { $("model-mode").textContent = s.enabled ? "AI check: on" : "AI check: off (rules only)"; }).catch(() => {});
     samples = await (await fetch("/v1/requests/samples")).json();
     const sel = $("formal-sample");
     samples.forEach((s, i) => sel.append(new Option(`${s.id} · ${s.applicant?.organisation || ""} · ${s.requested_as}`, String(i))));

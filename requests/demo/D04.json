@@ -1,0 +1,17 @@
+{
+  "id": "D04",
+  "submitted": "2026-10-30T12:00:00+01:00",
+  "applicant": {
+    "name": "Demo",
+    "organisation": "Diabetes Research Lab, MedUni Graz",
+    "country": "AT"
+  },
+  "requested_as": "health data access application",
+  "requested_format": "pseudonymised records",
+  "purpose": "Research on regional differences in diabetes care. We need all patient-level records.",
+  "question": "How many patients have type 2 diabetes, by region?",
+  "definitions": [
+    "Type 2 diabetes = ICD-10 code starting with E11.",
+    "Report per region: number of patients with type 2 diabetes."
+  ]
+}

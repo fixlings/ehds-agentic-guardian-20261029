@@ -24,15 +24,17 @@ PROHIBITED = [
         "id": "insurance",
         "label": "setting insurance premiums, cover or credit terms based on health data",
         "groups": [
-            r"\binsur\w*|\bunderwrit\w*|\bcredit\b|\bloans?\b",
-            r"\bpremium\w*|\bpric\w*|\btariff\w*|\bunderwrit\w*|\brisk[- ]rat\w*|\bexclud\w*|\bcontributions?\b|\bcustomers?\b|\bconditions of loans?\b",
+            r"\binsur\w*|\bunderwrit\w*|\bcredit\b|\bloans?\b|\bbanks?\b|\bmortgages?\b|\blenders?\b",
+            r"\bpremium\w*|\bpric\w*|\btariff\w*|\bunderwrit\w*|\brisk[- ]rat\w*|\bexclud\w*|\bcontributions?\b|\bcustomers?\b|\bconditions of loans?\b"
+            r"|\bfees?\b|\bmortgages?\b|\bdecide who\b|\bwho gets\b|\bmembers?\b|\bpolic(?:y|ies)holders?\b|\bcover(?:age)?\b",
         ],
     },
     {
         "id": "marketing",
         "label": "advertising or marketing",
         "groups": [
-            r"\badvertis\w*|\bmarketing\b|\bpromot\w*|\bsales (?:campaign|team|target\w*)|\bcampaign\w*|\btarget(?:ed|ing)? (?:physicians|doctors|customers|consumers)",
+            r"\badvertis\w*|\bmarketing\b|\bpromot\w*|\bsales\b|\bsales ?reps?\b|\brepresentatives\b|\bcampaign\w*"
+            r"|\btarget(?:ed|ing)? (?:physicians|doctors|customers|consumers)|\bboost (?:sales|revenue|prescriptions)|\bmarket share\b",
         ],
         "exclude": r"\bhealth promotion\b|\bpromot\w* (?:health|prevention|screening|vaccination)",
     },
@@ -40,15 +42,16 @@ PROHIBITED = [
         "id": "employment",
         "label": "decisions about employees, job applicants or job offers",
         "groups": [
-            r"\bemploye\w*|\bstaff list|\bworkforce|\bjob (?:offer|applicant)\w*|\bhr department|\brecruit\w*|\bhiring\b",
-            r"\bcontracts?\b|\bhir\w*|\bdismiss\w*|\bfir(?:e|ing)\b|\bpromotion decisions?|\bselect\w*|\bscreen\w*|\bmatch\w*|\bsick leave|\brenew\w*|\bjob offers?\b",
+            r"\bemploye\w*|\bstaff list|\bworkforce|\bjob (?:offer|applicant)\w*|\bhr department|\brecruit\w*|\bhiring\b|\bworkers?\b|\bour staff\b",
+            r"\bcontracts?\b|\bhir\w*|\bdismiss\w*|\bfir(?:e|ing)\b|\bpromotion decisions?|\bselect\w*|\bscreen\w*|\bmatch\w*|\bsick leave|\brenew\w*|\bjob offers?\b"
+            r"|\blet (?:\w+ )?go\b|\blay ?offs?\b|\bredundan\w*|\bwho to (?:keep|hire|fire)",
         ],
     },
     {
         "id": "harmful_products",
         "label": "developing or marketing harmful products (tobacco, nicotine, alcohol, illicit drugs, weapons, addictive products)",
         "groups": [
-            r"\btobacco|\bnicotine|\bcigarett\w*|\bvap(?:e|ing)\b|\balcohol\w*|\bbeer\b|\bspirits\b|\bweapon\w*|\bgambling|\billicit drugs?",
+            r"\btobacco|\bnicotine|\bcigarett\w*|\bvap(?:e|ing)\b|\balcohol\w*|\bbeer\b|\bspirits\b|\bvodka|\bwhisk(?:e)?y|\bliquor|\bweapon\w*|\bgambling|\billicit drugs?",
             r"\bdevelop\w*|\bflavou?rs?\b|\bproducts?\b|\blaunch\w*|\bposition\w*|\bsell\w*|\bmarket\b|\bbrand\w*",
         ],
         "exclude": r"\bcessation\b|\bquit(?:ting)?\b|\bprevent\w* (?:smoking|alcohol|addiction)",
@@ -57,15 +60,16 @@ PROHIBITED = [
         "id": "individual_decisions",
         "label": "decisions detrimental to individuals or re-identifying people",
         "groups": [
-            r"\bre-?identif\w*|\bidentify (?:individual|specific|the) (?:patients?|persons?|people)|\bmatch\w* (?:the )?(?:records|data) with\b|\bwho has been diagnosed\b|\bnames? and addresses\b|\bdeny\w* (?:treatment|benefits?)",
+            r"\bre-?identif\w*|\bidentify (?:individual|specific|the) (?:patients?|persons?|people)|\bmatch\w* (?:the )?(?:records|data) with\b|\bwho has been diagnosed\b|\bnames? and addresses\b|\bdeny\w* (?:treatment|benefits?)"
+            r"|\bmy (?:neighbou?r|colleague|employee|boss|wife|husband|partner|ex)\b|\bwhether (?:\w+ ){1,3}(?:has|had|is)\b|\bdoes (?:\w+ ){1,3}have\b|\blist of (?:the )?(?:patients|names)\b",
         ],
     },
 ]
 
 SPE_JUSTIFICATION = re.compile(
     r"aggregates? (?:are|is) not enough|statistics (?:are|is) not (?:enough|sufficient)"
-    r"|aggregated? (?:data|statistics) (?:are|is|would be) (?:not|in)sufficient|individual[- ]level|patient[- ]level"
-    r"|record[- ]level|needs? (?:individual|pseudonymised) (?:records|data|histories)|cannot be answered with (?:statistics|aggregates)",
+    r"|aggregated? (?:data|statistics) (?:are|is|would be) (?:not|in)sufficient"
+    r"|(?:training|model|analysis) needs? (?:individual|patient)[- ]level|cannot be answered with (?:statistics|aggregates)",
     re.I,
 )
 
@@ -143,7 +147,16 @@ def decide(req: dict) -> Decision:
     allowed = [label for pat, label in ALLOWED_PURPOSE_HINTS if re.search(pat, text, re.I)]
     purpose_note = ", ".join(dict.fromkeys(allowed)) or "an allowed purpose under Art. 53"
     if not allowed:
-        flags.append("No clear Art. 53 purpose recognised; approved by default order, please review.")
+        return Decision(
+            "REJECT",
+            ["53"],
+            "No permitted purpose (Art. 53) could be recognised in the purpose or question.",
+            "Your request is rejected because it does not state a purpose the EHDS allows (Art. 53): research, "
+            "public health, policy-making, official statistics, education or developing algorithms. No data was "
+            "accessed. Please submit a new request that explains what the data will be used for.",
+            [{"category": "no_permitted_purpose", "quotes": []}],
+            flags,
+        )
 
     kind = req.get("requested_as", "").strip().lower()
     if kind == "health data request":
@@ -171,10 +184,14 @@ def decide(req: dict) -> Decision:
             [{"category": "spe_justification", "quotes": [just.group(0)]}],
             flags,
         )
+    return statistics_instead(purpose_note, flags)
+
+
+def statistics_instead(purpose_note: str, flags: list[str], why: str = "") -> Decision:
     return Decision(
         "APPROVE_STATISTICAL",
         ["53", "66", "69"],
-        f"Allowed purpose: {purpose_note}. The application does not explain why statistics are not enough, so "
+        f"Allowed purpose: {purpose_note}. {why}The application does not explain why statistics are not enough, so "
         "pseudonymised records are not justified (Art. 66). Approved as anonymised statistics instead (Art. 69).",
         "Your application is approved as anonymised statistics instead of records, because the question can be "
         "answered with statistics (Art. 66). If you need individual records, apply again and explain why "

@@ -1,0 +1,17 @@
+{
+  "id": "D02",
+  "submitted": "2026-10-30T12:00:00+01:00",
+  "applicant": {
+    "name": "Demo",
+    "organisation": "Pharmaco Austria GmbH",
+    "country": "AT"
+  },
+  "requested_as": "health data request",
+  "requested_format": "anonymised statistics",
+  "purpose": "Our sales representatives should visit the doctors in the regions with the most diabetics, to boost sales of our new drug.",
+  "question": "How many patients have type 2 diabetes, by region?",
+  "definitions": [
+    "Type 2 diabetes = ICD-10 code starting with E11.",
+    "Report per region: number of patients with type 2 diabetes."
+  ]
+}

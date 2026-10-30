@@ -1,7 +1,7 @@
 """Formal Track 3 door: official JSON request -> decision, articles, protected numbers or SPE.
 
 Wraps the deterministic engine in `ehds/` (judge -> recipe -> SQL -> privacy gate / workspace).
-No language model is involved on this route.
+Rules decide; an optional AI check (ehds/ai_check.py) can only make a decision stricter.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
-from ehds import audit, explain, workspace
+from ehds import ai_check, audit, explain, workspace
 from ehds.pipeline import handle
 
 REQUESTS_DIR = Path(__file__).resolve().parents[2] / "requests"
@@ -31,12 +31,18 @@ class WorkspaceQuery(BaseModel):
 
 
 def _samples() -> list[dict]:
-    return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(REQUESTS_DIR.glob("R*.json"))]
+    files = sorted(REQUESTS_DIR.glob("R*.json")) + sorted((REQUESTS_DIR / "demo").glob("D*.json"))
+    return [json.loads(p.read_text(encoding="utf-8")) for p in files]
 
 
 @router.get("/requests/samples")
 def samples() -> list[dict]:
     return _samples()
+
+
+@router.get("/requests/ai-status")
+def ai_status() -> dict:
+    return {"enabled": ai_check.enabled()}
 
 
 @router.post("/requests")

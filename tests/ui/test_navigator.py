@@ -15,11 +15,11 @@ def test_navigator_serves_static_ui_without_external_assets() -> None:
     response = client.get("/")
     assert response.status_code == 200
     assert "Health Data Navigator" in response.text
-    assert 'src="/app.js"' in response.text
+    assert 'src="/formal.js"' in response.text
     assert 'href="/styles.css"' in response.text
     assert "https://" not in response.text
     assert "MISTRAL_API_KEY" not in response.text
-    assert client.get("/app.js").status_code == 200
+    assert client.get("/formal.js").status_code == 200
     assert client.get("/styles.css").status_code == 200
 
 

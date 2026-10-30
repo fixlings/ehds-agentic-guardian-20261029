@@ -4,21 +4,38 @@ from __future__ import annotations
 
 import time
 
-from . import audit, certificate, engine, privacy, recipe, reference, workspace
+from . import ai_check, audit, certificate, engine, privacy, recipe, reference, workspace
 from .judge import decide
 
 
-def handle(req: dict, create_workspace: bool = True) -> dict:
+def handle(req: dict, create_workspace: bool = True, ai_client=None) -> dict:
     t0 = time.perf_counter()
-    d = decide(req)
+    ai = ai_check.review(req, ai_client)
+    d = ai_check.apply(decide(req), ai, req)
     out: dict = {
         "id": req.get("id"),
         "decision": d.decision,
         "articles": d.articles,
         "reason": d.reason,
         "applicant_letter": d.applicant_text,
+        "ai_check": ai,
         "staff": {"matched": d.matched, "flags": list(d.flags)},
     }
+    try:
+        _compute(req, d, out, create_workspace)
+    except Exception as exc:  # noqa: BLE001 — a bad definition must give a clear answer, not a crash
+        out["answer"] = {"error": "The definitions could not be turned into a calculation. A staff member will review the request."}
+        out.pop("workspace", None)
+        out["staff"]["flags"].append(f"Calculation failed ({type(exc).__name__}); staff review needed.")
+    out["certificate"] = certificate.issue(req, out)
+    out["staff"]["seconds"] = round(time.perf_counter() - t0, 3)
+    audit.log("decision", request_id=req.get("id"), decision=d.decision, articles=d.articles,
+              double_check=out.get("verification", {}).get("status"), certificate=out["certificate"]["id"],
+              ai_check=ai.get("status"), flags=out["staff"]["flags"], seconds=out["staff"]["seconds"])
+    return out
+
+
+def _compute(req: dict, d, out: dict, create_workspace: bool) -> None:
     if d.decision != "REJECT":
         rc = recipe.parse(req)
         out["staff"]["recipe"] = rc
@@ -48,9 +65,3 @@ def handle(req: dict, create_workspace: bool = True) -> dict:
                 out["staff"]["flags"].append(out["verification"]["detail"])
             elif create_workspace:
                 out["workspace"] = workspace.create(req["id"], ids, out["record_types"])
-    out["certificate"] = certificate.issue(req, out)
-    out["staff"]["seconds"] = round(time.perf_counter() - t0, 3)
-    audit.log("decision", request_id=req.get("id"), decision=d.decision, articles=d.articles,
-              double_check=out.get("verification", {}).get("status"), certificate=out["certificate"]["id"],
-              flags=out["staff"]["flags"], seconds=out["staff"]["seconds"])
-    return out
