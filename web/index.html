@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="A plain-language interface for the EHDS Track 3 synthetic research demonstration.">
+  <title>Health Data Navigator · EHDS Track 3</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-symbol" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+        <div><strong>Health Data<br>Navigator</strong><small>Research, with trust built in</small></div>
+      </div>
+      <nav class="side-nav" aria-label="Main navigation">
+        <button class="nav-button active" data-view="request" aria-current="page">
+          <span class="nav-icon" aria-hidden="true">＋</span> New request
+        </button>
+        <button class="nav-button" data-view="history">
+          <span class="nav-icon" aria-hidden="true">☷</span> My requests <span id="history-count" class="nav-count">0</span>
+        </button>
+        <button class="nav-button" data-view="how">
+          <span class="nav-icon" aria-hidden="true">ⓘ</span> How it works
+        </button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="orbit-art" aria-hidden="true"><span class="orbit-one"></span><span class="orbit-two"></span><span class="orbit-three"></span></div>
+        <p>Better questions.<br>Safer health insights.</p>
+        <small>Independent EHDS Track 3 hackathon prototype</small>
+      </div>
+    </aside>
+
+    <div class="main-column">
+      <header class="topbar">
+        <span class="project-label"><span class="project-dot" aria-hidden="true"></span> EHDS TRACK 3 <span class="topbar-divider">/</span> SYNTHETIC DEMO</span>
+        <div class="topbar-right"><span class="mode-pill" id="model-mode">Processing mode shown after first request</span><span class="avatar" aria-hidden="true">R</span><span class="user-label">Researcher<br><small>Demo role</small></span></div>
+      </header>
+
+      <main id="view-request" class="page-view" tabindex="-1">
+        <section class="hero">
+          <div class="eyebrow">ASK HEALTH DATA <span class="eyebrow-line"></span></div>
+          <h1>What would you like to investigate?</h1>
+          <p>Ask a research question in everyday language. We'll interpret it, check the purpose and evidence, and explain what can safely be returned.</p>
+        </section>
+
+        <div class="main-grid">
+          <section class="question-panel" aria-labelledby="request-heading">
+            <div class="panel-kicker"><span class="round-icon blue">✦</span><h2 id="request-heading">Your research question</h2></div>
+            <form id="request-form">
+              <label class="input-label" for="question">Describe the information you need</label>
+              <div class="textarea-shell">
+                <textarea id="question" name="question" minlength="5" maxlength="4000" rows="4" required>How many women aged 50 or older have breast cancer and BMI >=30?</textarea>
+                <span class="char-count" id="char-count">0 / 4000</span>
+              </div>
+              <p class="example-label">Try a demo scenario</p>
+              <div class="example-list" role="group" aria-label="Example research questions">
+                <button type="button" class="example-chip" data-example="a">A · Research statistics</button>
+                <button type="button" class="example-chip" data-example="b">B · Evidence check</button>
+                <button type="button" class="example-chip" data-example="c">C · Purpose change</button>
+              </div>
+
+              <div class="context-fields">
+                <div>
+                  <label class="input-label" for="role">Researcher role <span class="label-muted">(demo only)</span></label>
+                  <select id="role" name="role">
+                    <option value="public_health_researcher">Public-health researcher</option>
+                    <option value="clinician">Clinician</option>
+                    <option value="regulator">Regulator</option>
+                    <option value="citizen">Citizen</option>
+                    <option value="insurer">Insurer</option>
+                    <option value="employer">Employer</option>
+                    <option value="marketer">Marketer</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="input-label" for="purpose">Stated purpose</label>
+                  <input id="purpose" name="purpose" maxlength="1000" required value="Public-health surveillance of cancer prevalence" autocomplete="off">
+                </div>
+              </div>
+              <div class="form-actions"><button id="run-button" class="primary-button" type="submit"><span aria-hidden="true">⌕</span> Check my request <span aria-hidden="true">→</span></button><span id="form-note" class="form-note">No patient-level records are available in this demo.</span></div>
+            </form>
+          </section>
+
+          <aside class="understood-panel" aria-labelledby="understood-heading">
+            <div class="understood-title"><span class="round-icon mint" aria-hidden="true">✓</span><div><h2 id="understood-heading">Your request, understood</h2><p>See how the request was interpreted before deciding what to ask next.</p></div></div>
+            <div id="understood-empty" class="understood-empty"><span class="empty-illustration" aria-hidden="true">◎</span><strong>Ready when you are</strong><p>Run a question and its validated interpretation will appear here.</p></div>
+            <div id="understood-data" hidden>
+              <dl class="interpret-list">
+                <div><dt><span aria-hidden="true">♙</span> Population</dt><dd id="understood-population">—</dd></div>
+                <div><dt><span aria-hidden="true">✚</span> Condition</dt><dd id="understood-condition">—</dd></div>
+                <div><dt><span aria-hidden="true">▥</span> Measure</dt><dd id="understood-measure">—</dd></div>
+                <div><dt><span aria-hidden="true">◎</span> Purpose</dt><dd id="understood-purpose">—</dd></div>
+              </dl>
+              <p class="status-small" id="interpretation-warning"></p>
+              <button class="text-button" id="edit-request" type="button">Edit my question <span aria-hidden="true">↗</span></button>
+            </div>
+            <div class="data-boundary"><span class="shield-symbol" aria-hidden="true">✓</span><div><strong>Synthetic data only</strong><span>Results must pass the backend's policy and suppression rules. No patient rows are shown.</span></div></div>
+          </aside>
+        </div>
+
+        <section id="result-section" class="result-section" hidden aria-labelledby="result-heading">
+          <div class="result-top"><div><span class="eyebrow">REQUEST OUTCOME</span><h2 id="result-heading" tabindex="-1">Decision</h2></div><span id="result-badge" class="result-badge"></span></div>
+          <p id="result-lead" class="result-lead" aria-live="polite"></p>
+          <div id="result-body" class="result-body"></div>
+          <details class="details-drawer"><summary>View the checks, explanation and audit reference</summary><div id="result-details" class="details-content"></div></details>
+          <div class="result-actions"><button type="button" id="followup-button" class="secondary-button">Ask a follow-up →</button><button type="button" id="new-button" class="text-button">Start a new session</button></div>
+        </section>
+
+        <section class="journey" aria-label="Three-step request journey">
+          <div class="journey-step"><div class="journey-head"><span class="step-number">1</span><span class="journey-connector"></span><span class="step-icon" aria-hidden="true">▤</span></div><h3>Describe</h3><p>Explain the research question in plain language.</p></div>
+          <div class="journey-step"><div class="journey-head"><span class="step-number">2</span><span class="journey-connector"></span><span class="step-icon" aria-hidden="true">♢</span></div><h3>Verify</h3><p>Purpose, evidence and privacy rules are checked by the existing engine.</p></div>
+          <div class="journey-step"><div class="journey-head"><span class="step-number">3</span><span class="step-icon" aria-hidden="true">▥</span></div><h3>Get a safe answer</h3><p>Receive statistics, a qualification, clarification or refusal.</p></div>
+        </section>
+
+        <section class="agent-explainer" aria-label="Evidence and Guardian explanation">
+          <div class="agent-explainer-head"><span class="sparkle" aria-hidden="true">✧</span><strong>How it works: Guardian checks the purpose · Evidence checks conclusions</strong></div>
+          <div class="agent-explainer-body"><div class="agent-cell"><span class="agent-icon guardian-icon" aria-hidden="true">◇</span><div><strong>Guardian</strong><p>Enforces deterministic purpose rules and rejects forbidden uses before any aggregate is run.</p></div></div><div class="agent-cell"><span class="agent-icon evidence-icon" aria-hidden="true">⌕</span><div><strong>Evidence</strong><p>Checks what the synthetic data can support and explains where a claim goes beyond the evidence.</p></div></div></div>
+        </section>
+        <p class="bottom-note">Research prototype · Synthetic dataset · No verified legal-article mapping · Not a clinical or production data service</p>
+      </main>
+
+      <main id="view-history" class="page-view secondary-view" tabindex="-1" hidden>
+        <div class="eyebrow">CURRENT BROWSER SESSION</div><h1>My requests</h1><p class="view-intro">Your recent questions in this tab. Nothing is stored in browser storage or uploaded beyond the API request.</p><div id="history-items" class="history-items"></div>
+      </main>
+
+      <main id="view-how" class="page-view secondary-view" tabindex="-1" hidden>
+        <div class="eyebrow">ABOUT THE SYSTEM</div><h1>How it works</h1><p class="view-intro">The interface is a clear window onto the team's existing engine—not a substitute for its checks.</p>
+        <div class="how-grid">
+          <article><span class="how-step">01</span><h2>Interpret</h2><p>The interpreter proposes a structured question. Local allowlists validate clinical codes and the query schema.</p></article>
+          <article><span class="how-step">02</span><h2>Guard</h2><p>Deterministic rules determine whether the stated use is permitted. Forbidden purposes are rejected before aggregation.</p></article>
+          <article><span class="how-step">03</span><h2>Investigate</h2><p>For permitted requests, the synthetic executor calculates results and the Evidence Agent checks scientific limitations.</p></article>
+          <article><span class="how-step">04</span><h2>Explain</h2><p>Only backend-returned outcomes, non-suppressed results and audit references are displayed.</p></article>
+        </div>
+        <div class="honesty-note"><strong>Important limitation</strong><p>The current backend implements small-cell suppression, but we have not verified cross-query disclosure-history protection (for example, 72 − 71 = 1). This interface does not claim to close that gap. Roles in the demo are self-declared; no real identity or access verification is present.</p></div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
