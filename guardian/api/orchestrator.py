@@ -20,12 +20,13 @@ from guardian.contracts.schemas import (
     Interpretation,
     PolicyDecision,
     PurposeCategory,
+    ReasonCode,
     TurnRecord,
 )
 from guardian.api.sessions import SessionStore
 from guardian.evidence.executor import MockQueryExecutor
 from guardian.evidence.investigator import EvidenceInvestigator
-from guardian.nlp.interpreter import Interpreter
+from guardian.nlp.interpreter import Interpreter, ModelCallError
 from guardian.nlp.normalizer import Normalizer
 from guardian.purpose.audit import InMemoryAuditLog
 from guardian.purpose.guardian import PurposeGuardian
@@ -72,15 +73,30 @@ class Orchestrator:
         session = self._store.resolve(request)
         precheck = self._guardian.evaluate(request, session, _NEUTRAL)
         use_model = self._client is not None and precheck.outcome != "reject"
+        live_validated = False
         if use_model:
-            self._require_model()
-        self._check_deadline(started)
-        interpreter = Interpreter(
-            client=self._client if use_model else None,
-            normalizer=self._normalizer,
-            dataset_id=request.dataset_id,
-        )
-        interpretation = interpreter.interpret(request.message, session)
+            try:
+                self._require_model()
+                self._check_deadline(started)
+                interpreter = Interpreter(
+                    client=self._client,
+                    normalizer=self._normalizer,
+                    dataset_id=request.dataset_id,
+                    propose_query=True,
+                )
+                interpretation = interpreter.interpret(request.message, session)
+                live_validated = interpreter.validated_live_response
+            except (ModelUnavailableError, ModelCallError):
+                self._audit_model_failure(request, session)
+                raise ModelUnavailableError("EU Mistral endpoint is unavailable") from None
+        else:
+            self._check_deadline(started)
+            interpreter = Interpreter(
+                client=None,
+                normalizer=self._normalizer,
+                dataset_id=request.dataset_id,
+            )
+            interpretation = interpreter.interpret(request.message, session)
         policy = self._guardian.evaluate(request, session, interpretation)
         decision = self._decision(policy, interpretation)
         evidence = None
@@ -102,7 +118,13 @@ class Orchestrator:
         if tool_steps > MAX_TOOL_STEPS:
             raise RuntimeError("tool step budget exceeded")
 
-        explanation = _explanation(decision, policy, interpretation, evidence)
+        explanation = _explanation(
+            decision,
+            policy,
+            interpretation,
+            evidence,
+            live_note="Interpreted by EU Mistral (mistral-small-2603)." if live_validated else None,
+        )
         limitations = _limitations(decision, evidence)
         audit = self._audit(
             request,
@@ -132,19 +154,43 @@ class Orchestrator:
             explanation=explanation,
             audit_id=audit.audit_id,
             limitations=limitations,
-            model=DEFAULT_MODEL if use_model else None,
+            model=DEFAULT_MODEL if live_validated else None,
             tool_steps=tool_steps,
             latency_ms=elapsed_ms,
-            live_model=use_model,
+            live_model=live_validated,
         )
 
     def _require_model(self) -> None:
         try:
             models = self._client.list_models()
-        except Exception as exc:  # noqa: BLE001 — transport failure becomes 503
-            raise ModelUnavailableError("EU Mistral endpoint is unavailable") from exc
-        if not models:
-            raise ModelUnavailableError("EU Mistral returned no models")
+        except Exception:
+            raise ModelUnavailableError("EU Mistral endpoint is unavailable") from None
+        if not models or DEFAULT_MODEL not in models:
+            raise ModelUnavailableError("Required EU model is unavailable")
+
+    def _audit_model_failure(self, request: AgentRequest, session) -> None:
+        policy = PolicyDecision(
+            outcome="reject",
+            rule_id="deny.model_unavailable",
+            reason_code=ReasonCode.needs_clarification,
+            purpose_category=PurposeCategory.unknown,
+            purpose_changed=False,
+            role=request.role,
+            evidence=["EU Mistral did not return a validated interpretation."],
+        )
+        record = AuditRecord(
+            audit_id=str(uuid.uuid4()),
+            session_id=session.session_id,
+            recorded_at=datetime.now(timezone.utc).isoformat(),
+            request_message=request.message,
+            role=request.role,
+            stated_purpose=request.stated_purpose,
+            policy=policy,
+            query=None,
+            aggregate_fingerprint=None,
+            evidence_summary=["model_unavailable"],
+        )
+        self.audit_log.append(record)
 
     def _check_deadline(self, started: float) -> None:
         if time.perf_counter() - started > self._deadline_s:
@@ -187,8 +233,16 @@ class Orchestrator:
         return record
 
 
-def _explanation(decision: str, policy: PolicyDecision, interpretation: Interpretation, evidence) -> str:
+def _explanation(
+    decision: str,
+    policy: PolicyDecision,
+    interpretation: Interpretation,
+    evidence,
+    live_note: str | None = None,
+) -> str:
     parts: list[str] = []
+    if live_note and decision == "allow":
+        parts.append(live_note)
     if decision == "reject":
         parts.append(f"Request refused ({policy.reason_code.value}).")
         for item in policy.evidence:

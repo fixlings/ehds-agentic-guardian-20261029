@@ -92,6 +92,9 @@ class Normalizer:
         self._register_aliases("region", self._regions.keys())
         self._alias_entries.sort(key=lambda x: (-len(x[0]), x[0]))
 
+    def lexicon(self) -> dict:
+        return self._lex
+
     @classmethod
     def from_default_lexicon(cls) -> Normalizer:
         data = json.loads(_LEXICON_PATH.read_text(encoding="utf-8"))

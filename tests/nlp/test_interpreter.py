@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from guardian.contracts.schemas import PurposeCategory, SessionContext, TurnRecord
-from guardian.contracts.budget import DEFAULT_MODEL
+from guardian.contracts.budget import DEFAULT_MODEL, MISTRAL_EU_BASE_URL
 from guardian.nlp.interpreter import Interpreter
 from guardian.nlp.mistral_client import MistralEuClient
 
@@ -179,33 +179,46 @@ def test_interpreter_has_no_sql_in_query(interpreter: Interpreter) -> None:
     assert "sql" not in dumped
 
 
+def test_mistral_client_rejects_non_eu_host() -> None:
+    with pytest.raises(ValueError, match="EU host"):
+        MistralEuClient(api_key="not-a-real-credential", base_url="https://api.mistral.ai")
+    assert MISTRAL_EU_BASE_URL == "https://api.eu.mistral.ai"
+
+
+def _fail_live(exc: BaseException, api_key: str) -> None:
+    if api_key and (api_key in str(exc) or api_key in repr(exc)):
+        pytest.fail("Live EU Mistral call failed. Credential redacted from this message.")
+    pytest.fail(f"Live EU Mistral call failed ({type(exc).__name__}).")
+
+
 @pytest.mark.live
 def test_mistral_eu_live_json_completion() -> None:
     api_key = os.environ.get("MISTRAL_API_KEY")
     if not api_key:
-        pytest.skip("MISTRAL_API_KEY not set")
+        pytest.skip("MISTRAL_API_KEY not set. Live EU Mistral test was not executed.")
 
     try:
         client = MistralEuClient(api_key=api_key)
+    except Exception as exc:
+        _fail_live(exc, api_key)
+    try:
         models = client.list_models()
-    except Exception as exc:  # noqa: BLE001
-        pytest.skip(f"EU Mistral unavailable: {exc}")
-
-    if not models:
-        pytest.skip("EU Mistral list_models returned no ids")
-
+    except Exception as exc:
+        _fail_live(exc, api_key)
     if DEFAULT_MODEL not in models:
-        pytest.skip(f"{DEFAULT_MODEL} not listed on EU host; got: {', '.join(models)}")
-
-    model = DEFAULT_MODEL
+        pytest.fail("mistral-small-2603 was not listed by the EU host")
     start = time.perf_counter()
-    payload = client.complete_json(
-        model=model,
-        system='Respond with JSON: {"ok": true}',
-        user="ping",
-        timeout_s=20.0,
-    )
+    try:
+        payload = client.complete_json(
+            model=DEFAULT_MODEL,
+            system='Respond with JSON: {"ok": true}',
+            user="ping",
+            timeout_s=20.0,
+        )
+    except Exception as exc:
+        _fail_live(exc, api_key)
     latency_ms = int((time.perf_counter() - start) * 1000)
     assert isinstance(payload, dict)
-    note = client.model_substitution_note or f"model={model}"
-    pytest.live_result = {"latency_ms": latency_ms, "model": model, "note": note}  # type: ignore[attr-defined]
+    assert MISTRAL_EU_BASE_URL == "https://api.eu.mistral.ai"
+    note = client.model_substitution_note or f"model={DEFAULT_MODEL}"
+    pytest.live_result = {"latency_ms": latency_ms, "model": DEFAULT_MODEL, "note": note}  # type: ignore[attr-defined]

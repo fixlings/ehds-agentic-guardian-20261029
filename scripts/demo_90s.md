@@ -1,5 +1,7 @@
 # 90-second spoken demo
 
+The default demonstration is offline: the lexicon parses the question and no model is called. The live run is the same script with `--live`, which asks Mistral on the EU endpoint to propose the query. Policy, evidence, and the synthetic count stay local either way.
+
 This dataset is synthetic. There are no real patients in this demo.
 
 This is a bolt-on guardian for a European health-data statistics question. It runs offline here. When a model is used, it is Mistral on the EU endpoint only. A deterministic policy, not the model, decides allow or refuse.
