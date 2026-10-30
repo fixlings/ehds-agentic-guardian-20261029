@@ -1,9 +1,5 @@
 # Health Data Navigator
 
-**No API key needed.** Rules-only mode reaches all official metrics. The AI is an optional extra layer of caution.
-
-**[Watch the 2-minute demo](VIDEO_LINK)**
-
 - **Works:** All 10 official requests are correct. The app catches subtraction attacks within an organisation, catches purpose changes, and provides a locked workspace with no download.
 - **Not yet:** No logins. The Guardian's memory is per organisation name and resets on restart. Some new question types (e.g. per hospital) are not understood.
 - **Next:** Logins, a shared permanent memory, and broader question understanding.
