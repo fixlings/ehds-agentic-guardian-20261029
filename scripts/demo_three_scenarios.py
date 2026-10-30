@@ -57,6 +57,17 @@ def _post(
     return response.json()
 
 
+def _validation_category(body: dict) -> str:
+    interpretation = body.get("interpretation") or {}
+    notes = interpretation.get("notes") if isinstance(interpretation, dict) else None
+    if not isinstance(notes, list):
+        return "unspecified"
+    for note in notes:
+        if isinstance(note, str) and note.startswith("validation_category:"):
+            return note.split(":", 1)[1]
+    return "unspecified"
+
+
 def _show(title: str, lines: list[str]) -> None:
     print()
     print(f"=== {title} ===")
@@ -88,9 +99,26 @@ def main(argv: list[str] | None = None) -> None:
         "Public-health surveillance of cancer prevalence",
         live=live,
     )
+    interpretation = medical.get("interpretation") or {}
+    query = interpretation.get("query") if isinstance(interpretation, dict) else None
+    filters = query.get("filters") if isinstance(query, dict) else None
+    if not isinstance(filters, dict):
+        print(
+            "Scenario A did not return a structured query. "
+            f"decision={medical.get('decision')} "
+            f"needs_clarification={interpretation.get('needs_clarification') if isinstance(interpretation, dict) else None} "
+            f"validation_category={_validation_category(medical)}"
+        )
+        raise SystemExit(1)
     filters = medical["interpretation"]["query"]["filters"]
     if medical["decision"] != "allow" or medical["aggregate"] is None:
-        raise SystemExit("Scenario A did not return a synthetic aggregate.")
+        print(
+            "Scenario A did not return a synthetic aggregate. "
+            f"decision={medical.get('decision')} "
+            f"needs_clarification={interpretation.get('needs_clarification')} "
+            f"validation_category={_validation_category(medical)}"
+        )
+        raise SystemExit(1)
     if filters["sex"] != "female" or "obese" not in filters["bmi_bands"] or filters["breast_cancer"] is not True:
         raise SystemExit("Scenario A did not parse the medical query.")
     if not live and medical["aggregate"]["population_n"] != 42:
@@ -115,6 +143,8 @@ def main(argv: list[str] | None = None) -> None:
             [
                 f"live_model: {medical['live_model']}",
                 f"model: {medical['model']}",
+                f"needs_clarification: {medical['interpretation']['needs_clarification']}",
+                f"validation_category: {_validation_category(medical)}",
             ]
         )
     _show("A. Medical query", medical_lines)

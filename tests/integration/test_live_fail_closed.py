@@ -91,6 +91,59 @@ def test_validated_live_proposal_reports_live_model_and_lexicon_display() -> Non
     assert "select " not in response.text.lower()
 
 
+def test_scenario_a_near_miss_returns_synthetic_aggregate() -> None:
+    client = RecordingClient(
+        {
+            "proposed_purpose": "public_health_research",
+            "needs_clarification": True,
+            "query": {
+                "measures": "count",
+                "filters": {
+                    "sex": "women",
+                    "age_bands": ["50+"],
+                    "bmi_bands": ["BMI >=30"],
+                    "coded": [{"system": "ICD10", "code": "c50"}],
+                },
+            },
+        }
+    )
+    response = TestClient(create_app(client=client)).post(
+        ROUTE_PATH,
+        json={
+            "message": "How many women aged 50 or older have breast cancer and BMI >=30?",
+            "role": "public_health_researcher",
+            "stated_purpose": "Public-health surveillance of cancer prevalence",
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["decision"] == "allow"
+    assert body["live_model"] is True
+    assert body["aggregate"]["population_n"] == 42
+    assert body["interpretation"]["query"]["filters"]["breast_cancer"] is True
+    assert "validation_category:ok" in body["interpretation"]["notes"]
+
+
+def test_clarification_response_does_not_run_an_aggregate() -> None:
+    client = RecordingClient(
+        {
+            "proposed_purpose": "public_health_research",
+            "needs_clarification": True,
+            "query": None,
+        }
+    )
+    response = TestClient(create_app(client=client)).post(ROUTE_PATH, json=RESEARCH)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["decision"] == "clarify"
+    assert body["aggregate"] is None
+    assert body["live_model"] is False
+    assert body["interpretation"]["needs_clarification"] is True
+    assert body["interpretation"]["query"] is None
+    assert "validation_category:clarification_requested" in body["interpretation"]["notes"]
+    assert client.completions == 1
+
+
 def test_invented_code_does_not_widen_the_cohort() -> None:
     client = RecordingClient(
         {

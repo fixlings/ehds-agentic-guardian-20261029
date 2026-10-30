@@ -133,6 +133,45 @@ def test_flag_merge_model_error_is_not_a_successful_interpretation() -> None:
     raise AssertionError("a failed flag call must not return the lexicon interpretation")
 
 
+def test_scenario_a_near_miss_json_validates() -> None:
+    """A hedged Scenario A proposal used to become query=None before schema validation."""
+    client = _Proposal(
+        {
+            "proposed_purpose": "public_health_research",
+            "needs_clarification": True,
+            "query": {
+                "measures": "count",
+                "explanation": "women 50+ with breast cancer and high BMI",
+                "filters": {
+                    "sex": "female",
+                    "age_bands": ["50+"],
+                    "bmi_bands": ["BMI >=30"],
+                    "coded": [{"system": "ICD10", "code": "C50"}],
+                },
+            },
+        }
+    )
+    interpreter = Interpreter(client=client, propose_query=True)
+    result = interpreter.interpret(
+        "How many women aged 50 or older have breast cancer and BMI >=30?",
+        _session(),
+    )
+    assert interpreter.validated_live_response is True
+    assert result.needs_clarification is False
+    assert result.query is not None
+    filters = result.query.filters
+    assert filters.sex == "female"
+    assert [band.value for band in filters.age_bands] == ["50-59", "60-69", "70+"]
+    assert [band.value for band in filters.bmi_bands] == ["obese"]
+    assert filters.breast_cancer is True
+    coded = filters.coded[0]
+    assert coded.code == "C50"
+    assert coded.system.value == "ICD-10"
+    assert coded.display == "Malignant neoplasm of breast"
+    assert "validation_category:ok" in result.notes
+    assert "XYZ999" not in result.model_dump_json()
+
+
 def test_model_exception_is_not_swallowed() -> None:
     interpreter = Interpreter(
         client=_Proposal(RuntimeError("SUPER_SECRET_KEY_SENTINEL timeout")),

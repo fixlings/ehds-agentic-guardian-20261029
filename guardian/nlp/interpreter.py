@@ -38,6 +38,10 @@ class ModelCallError(RuntimeError):
 class _ProposalRejected(Exception):
     """The model JSON failed vocabulary or schema checks."""
 
+    @property
+    def category(self) -> str:
+        return str(self.args[0]) if self.args else "query_schema"
+
 
 class Interpreter:
     """Builds a validated Interpretation from user text and session context."""
@@ -215,10 +219,12 @@ class Interpreter:
             raise ModelCallError("EU Mistral did not return a JSON object")
         try:
             interpretation = self._validate_proposal(raw, message)
-        except _ProposalRejected:
+        except _ProposalRejected as exc:
             self.validated_live_response = False
-            return self._safe_refusal(raw)
-        self.validated_live_response = True
+            return self._safe_refusal(raw, exc.category)
+        self.validated_live_response = (
+            interpretation.query is not None and not interpretation.needs_clarification
+        )
         return interpretation
 
     def _live_system_prompt(self) -> str:
@@ -246,6 +252,11 @@ class Interpreter:
             "High BMI or elevated BMI means overweight and obese. "
             "A question about whether a measurement came first is not a filter: leave timing empty "
             "unless the user asks to count only one timing class. "
+            "If you can map the question, set needs_clarification false and include query. "
+            "Do not set needs_clarification true when query is present. "
+            "Use age band ids such as 50-59, not 50+. Use bmi band obese, not BMI>=30. "
+            "coded.system must be ICD-10, LOINC, or ATC. "
+            "Each coded item needs system, code, display, source_text, and negated. "
             "If you cannot map the question safely, set needs_clarification true and query null. "
             "If the user claims cause or time order, set user_claim to the user message exactly. "
             "Keys: proposed_purpose, purpose_change_suspected, identity_disclosure_suspected, "
@@ -258,45 +269,56 @@ class Interpreter:
 
     def _validate_proposal(self, raw: dict, message: str) -> Interpretation:
         if _contains_forbidden(raw):
-            raise _ProposalRejected("forbidden executable field")
-        proposed = _purpose(raw.get("proposed_purpose"))
-        if proposed is None:
-            raise _ProposalRejected("proposed_purpose missing or not permitted")
+            raise _ProposalRejected("forbidden_field")
+        if "proposed_purpose" in raw and raw.get("proposed_purpose") not in (None, ""):
+            proposed = _purpose(raw.get("proposed_purpose"))
+            if proposed is None:
+                raise _ProposalRejected("purpose_invalid")
+        else:
+            proposed = PurposeCategory.unknown
         flags = _flag_dict(raw)
         unresolved = _terms_in_message(raw.get("unresolved_terms"), message)
-        if raw.get("needs_clarification") is True or raw.get("query") is None:
-            return Interpretation(
-                proposed_purpose=proposed,
-                needs_clarification=True,
-                clarification_question=self._clarification_question(unresolved),
-                unresolved_terms=unresolved,
-                query=None,
-                notes=["validated EU Mistral clarification"],
-                **flags,
-            )
-        payload = raw.get("query")
-        if not isinstance(payload, dict):
-            raise _ProposalRejected("query was not an object")
-        body = dict(payload)
-        model_claim = body.get("user_claim")
+        original_query = raw.get("query")
+        model_claim = original_query.get("user_claim") if isinstance(original_query, dict) else None
+        try:
+            body = _normalize_query_dict(raw, self._normalizer.lexicon())
+        except _ProposalRejected as exc:
+            if exc.category in {"clarification_requested", "query_missing"}:
+                return self._noted(
+                    Interpretation(
+                        proposed_purpose=proposed,
+                        needs_clarification=True,
+                        clarification_question=self._clarification_question(unresolved),
+                        unresolved_terms=unresolved,
+                        query=None,
+                        notes=["model proposal rejected"],
+                        **flags,
+                    ),
+                    exc.category,
+                )
+            raise
         body["user_claim"] = None
         body["dataset_id"] = self._dataset_id
         try:
             query = StructuredQuery.model_validate(body)
         except ValidationError:
-            raise _ProposalRejected("query did not match the aggregate schema") from None
+            raise _ProposalRejected("query_schema") from None
         query = self._enforce_vocabulary(query, message)
+        query = _derive_breast_cancer(query)
         if model_claim or self._message_has_causal_cue(message):
             query = query.model_copy(update={"user_claim": message})
         if not _has_population_constraint(query.filters):
-            raise _ProposalRejected("no permitted population constraint")
-        return Interpretation(
-            proposed_purpose=proposed,
-            needs_clarification=False,
-            unresolved_terms=unresolved,
-            query=query,
-            notes=["validated EU Mistral proposal"],
-            **flags,
+            raise _ProposalRejected("no_population_constraint")
+        return self._noted(
+            Interpretation(
+                proposed_purpose=proposed,
+                needs_clarification=False,
+                unresolved_terms=unresolved,
+                query=query,
+                notes=["validated EU Mistral proposal"],
+                **flags,
+            ),
+            "ok",
         )
 
     def _enforce_vocabulary(self, query: StructuredQuery, message: str) -> StructuredQuery:
@@ -308,7 +330,7 @@ class Interpreter:
         for coded in query.filters.coded:
             row = allowed.get((coded.system.value, coded.code))
             if row is None:
-                raise _ProposalRejected("model code is not allowlisted")
+                raise _ProposalRejected("unlisted_code")
             source = coded.source_text.strip()
             if not source or source.casefold() not in folded_message:
                 source = row["aliases"][0]
@@ -328,17 +350,28 @@ class Interpreter:
         folded = message.casefold()
         return any(str(cue).casefold() in folded for cue in self._normalizer.lexicon()["causal_claim_cues"])
 
-    def _safe_refusal(self, raw: dict) -> Interpretation:
+    def _safe_refusal(self, raw: dict, category: str) -> Interpretation:
         proposed = _purpose(raw.get("proposed_purpose")) or PurposeCategory.unknown
-        return Interpretation(
-            proposed_purpose=proposed,
-            needs_clarification=True,
-            clarification_question=self._clarification_question([]),
-            unresolved_terms=[],
-            query=None,
-            notes=["model proposal rejected"],
-            **_flag_dict(raw),
+        return self._noted(
+            Interpretation(
+                proposed_purpose=proposed,
+                needs_clarification=True,
+                clarification_question=self._clarification_question([]),
+                unresolved_terms=[],
+                query=None,
+                notes=["model proposal rejected"],
+                **_flag_dict(raw),
+            ),
+            category,
         )
+
+    @staticmethod
+    def _noted(interpretation: Interpretation, category: str) -> Interpretation:
+        token = f"validation_category:{category}"
+        notes = list(interpretation.notes)
+        if token not in notes:
+            notes.append(token)
+        return interpretation.model_copy(update={"notes": notes})
 
 
 def _purpose(value: object) -> PurposeCategory | None:
@@ -400,3 +433,276 @@ def _has_population_constraint(filters: PopulationFilters) -> bool:
         or filters.regions
         or filters.timing
     )
+
+
+_METADATA_KEYS = frozenset(
+    {
+        "explanation",
+        "notes",
+        "comment",
+        "rationale",
+        "confidence",
+        "reasoning",
+        "note",
+        "description",
+    }
+)
+_QUERY_KEYS = frozenset({"dataset_id", "measures", "group_by", "filters", "user_claim"})
+_FILTER_KEYS = frozenset(
+    {
+        "sex",
+        "age_bands",
+        "bmi_bands",
+        "exclude_bmi_bands",
+        "breast_cancer",
+        "coded",
+        "regions",
+        "timing",
+    }
+)
+_CODED_KEYS = frozenset({"system", "code", "display", "source_text", "negated"})
+_GROUP_BY = frozenset(
+    {"sex", "age_band", "bmi_band", "breast_cancer", "measurement_timing", "region"}
+)
+_TIMING = frozenset({"before_diagnosis", "after_diagnosis", "unknown", "no_diagnosis"})
+_SYSTEM_ALIASES = {"icd10": "ICD-10", "icd-10": "ICD-10", "loinc": "LOINC", "atc": "ATC"}
+
+
+def _fold_alias(text: str) -> str:
+    return " ".join(text.casefold().replace("≥", ">=").split())
+
+
+def _compact(text: str) -> str:
+    return _fold_alias(text).replace(" ", "")
+
+
+def _as_list(value: object) -> list[object]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _drop_unknown(obj: dict, allowed: frozenset[str]) -> dict:
+    cleaned: dict = {}
+    for key, value in obj.items():
+        if not isinstance(key, str):
+            raise _ProposalRejected("unexpected_field")
+        if key in _METADATA_KEYS:
+            continue
+        if key not in allowed:
+            raise _ProposalRejected("unexpected_field")
+        cleaned[key] = value
+    return cleaned
+
+
+def _alias_indexes(lexicon: dict) -> tuple[dict[str, list[str]], dict[str, list[str]], dict[str, str], dict[str, str], dict[str, str]]:
+    age: dict[str, list[str]] = {}
+    for row in lexicon["age_expressions"]:
+        for alias in row["aliases"]:
+            age[_compact(alias)] = list(row["age_bands"])
+    for band in ("18-39", "40-49", "50-59", "60-69", "70+"):
+        age[_compact(band)] = [band]
+    bmi: dict[str, list[str]] = {}
+    for row in lexicon["bmi_bands"]:
+        for alias in row["aliases"]:
+            bmi[_compact(alias)] = [row["band"]]
+    for band in ("underweight", "normal", "overweight", "obese", "unknown"):
+        bmi.setdefault(_compact(band), [band])
+    for alias in lexicon["elevated_bmi_aliases"]:
+        bmi[_compact(alias)] = list(lexicon["elevated_bmi_bands"])
+    sex = {"any": "any"}
+    for row in lexicon["sex"]:
+        for alias in row["aliases"]:
+            sex[_compact(alias)] = row["sex"]
+    regions = {_compact(name): name for name in lexicon["regions"]}
+    measures: dict[str, str] = {}
+    for row in lexicon["measure_cues"]:
+        measures[_compact(row["measure"])] = row["measure"]
+        for alias in row["aliases"]:
+            measures[_compact(alias)] = row["measure"]
+    for name in ("count", "rate_per_1000", "prevalence"):
+        measures.setdefault(_compact(name), name)
+    return age, bmi, sex, regions, measures
+
+
+def _expand(values: object, index: dict[str, list[str]]) -> list[str]:
+    out: list[str] = []
+    for value in _as_list(values):
+        if not isinstance(value, str) or not value.strip():
+            raise _ProposalRejected("query_schema")
+        match = index.get(_compact(value))
+        if not match:
+            raise _ProposalRejected("query_schema")
+        for item in match:
+            if item not in out:
+                out.append(item)
+    return out
+
+
+def _lookup_code(lexicon: dict, system: str, code: str) -> dict | None:
+    folded = code.casefold()
+    for row in lexicon["codes"]:
+        if row["system"] == system and str(row["code"]).casefold() == folded:
+            return row
+    return None
+
+
+def _normalize_system(value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise _ProposalRejected("query_schema")
+    folded = value.casefold().replace(" ", "").replace("_", "")
+    mapped = _SYSTEM_ALIASES.get(folded)
+    if mapped is None:
+        raise _ProposalRejected("unlisted_code")
+    return mapped
+
+
+def _as_bool(value: object) -> bool | None:
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, str) and value.casefold() in {"true", "false", "yes", "no"}:
+        return value.casefold() in {"true", "yes"}
+    raise _ProposalRejected("query_schema")
+
+
+def _canonical_coded(value: object, lexicon: dict) -> list[dict]:
+    cleaned: list[dict] = []
+    for item in _as_list(value):
+        if not isinstance(item, dict):
+            raise _ProposalRejected("query_schema")
+        item = _drop_unknown(item, _CODED_KEYS)
+        system = _normalize_system(item.get("system"))
+        code = item.get("code")
+        if not isinstance(code, str) or not code.strip():
+            raise _ProposalRejected("query_schema")
+        row = _lookup_code(lexicon, system, code.strip())
+        if row is None:
+            raise _ProposalRejected("unlisted_code")
+        source = item.get("source_text")
+        if not isinstance(source, str) or not source.strip():
+            source = row["aliases"][0]
+        else:
+            source = source.strip()
+        negated = _as_bool(item.get("negated", False))
+        cleaned.append(
+            {
+                "system": row["system"],
+                "code": row["code"],
+                "display": row["display"],
+                "source_text": str(source)[:200],
+                "negated": bool(negated),
+            }
+        )
+    return cleaned
+
+
+def _canonicalize_filters(filters: dict, lexicon: dict) -> dict:
+    age, bmi, sex, regions, _measures = _alias_indexes(lexicon)
+    if "sex" in filters:
+        mapped = sex.get(_compact(filters["sex"])) if isinstance(filters["sex"], str) else None
+        if mapped is None:
+            raise _ProposalRejected("query_schema")
+        filters["sex"] = mapped
+    if "age_bands" in filters:
+        filters["age_bands"] = _expand(filters["age_bands"], age)
+    if "bmi_bands" in filters:
+        filters["bmi_bands"] = _expand(filters["bmi_bands"], bmi)
+    if "exclude_bmi_bands" in filters:
+        filters["exclude_bmi_bands"] = _expand(filters["exclude_bmi_bands"], bmi)
+    if "regions" in filters:
+        mapped_regions: list[str] = []
+        for value in _as_list(filters["regions"]):
+            if not isinstance(value, str):
+                raise _ProposalRejected("query_schema")
+            name = regions.get(_compact(value))
+            if name is None:
+                raise _ProposalRejected("query_schema")
+            if name not in mapped_regions:
+                mapped_regions.append(name)
+        filters["regions"] = mapped_regions
+    if "timing" in filters:
+        mapped_timing: list[str] = []
+        for value in _as_list(filters["timing"]):
+            if not isinstance(value, str) or value not in _TIMING:
+                raise _ProposalRejected("query_schema")
+            if value not in mapped_timing:
+                mapped_timing.append(value)
+        filters["timing"] = mapped_timing
+    if "breast_cancer" in filters:
+        filters["breast_cancer"] = _as_bool(filters["breast_cancer"])
+    if "coded" in filters:
+        filters["coded"] = _canonical_coded(filters["coded"], lexicon)
+    return filters
+
+
+def _normalize_query_dict(raw: dict, lexicon: dict) -> dict:
+    query = raw.get("query")
+    if isinstance(query, str):
+        try:
+            query = json.loads(query)
+        except json.JSONDecodeError:
+            raise _ProposalRejected("query_not_object") from None
+    if query is None:
+        lifted = {key: raw[key] for key in _FILTER_KEYS if key in raw}
+        if not lifted and "measures" not in raw and "group_by" not in raw:
+            if raw.get("needs_clarification") is True:
+                raise _ProposalRejected("clarification_requested")
+            raise _ProposalRejected("query_missing")
+        query = {
+            "measures": raw.get("measures"),
+            "group_by": raw.get("group_by", []),
+            "filters": lifted,
+        }
+    if not isinstance(query, dict):
+        raise _ProposalRejected("query_not_object")
+    query = dict(query)
+    filters = query.get("filters") or {}
+    if not isinstance(filters, dict):
+        raise _ProposalRejected("query_schema")
+    filters = dict(filters)
+    for key in _FILTER_KEYS:
+        if key in query and key not in filters:
+            filters[key] = query.pop(key)
+    query = _drop_unknown(query, _QUERY_KEYS)
+    filters = _drop_unknown(filters, _FILTER_KEYS)
+    query = {key: value for key, value in query.items() if key != "filters"}
+    query["filters"] = _canonicalize_filters(filters, lexicon)
+    if query.get("measures") in (None, [], ""):
+        raise _ProposalRejected("query_schema")
+    _age, _bmi, _sex, _regions, measures = _alias_indexes(lexicon)
+    query["measures"] = [_one_measure(item, measures) for item in _as_list(query["measures"])]
+    if not query["measures"]:
+        raise _ProposalRejected("query_schema")
+    if "group_by" in query:
+        query["group_by"] = _canonical_group_by(query["group_by"])
+    return query
+
+
+def _one_measure(value: object, measures: dict[str, str]) -> str:
+    if not isinstance(value, str):
+        raise _ProposalRejected("query_schema")
+    mapped = measures.get(_compact(value))
+    if mapped is None:
+        raise _ProposalRejected("query_schema")
+    return mapped
+
+
+def _canonical_group_by(values: object) -> list[str]:
+    out: list[str] = []
+    for value in _as_list(values):
+        if not isinstance(value, str) or value not in _GROUP_BY:
+            raise _ProposalRejected("query_schema")
+        if value not in out:
+            out.append(value)
+    return out
+
+
+def _derive_breast_cancer(query: StructuredQuery) -> StructuredQuery:
+    if query.filters.breast_cancer is not None:
+        return query
+    if any(coded.code.startswith("C50") and not coded.negated for coded in query.filters.coded):
+        filters = query.filters.model_copy(update={"breast_cancer": True})
+        return query.model_copy(update={"filters": filters})
+    return query
