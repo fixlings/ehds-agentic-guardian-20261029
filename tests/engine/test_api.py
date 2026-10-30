@@ -91,3 +91,11 @@ def test_records_request_without_cohort_opens_no_workspace(client):
                question="Provide pseudonymised records.", definitions=["Report the size of the cohort you would make available."])
     body = client.post("/v1/requests", json=req).json()
     assert "workspace" not in body and "error" in body["answer"]
+
+
+def test_demo_d09_opens_secure_workspace(client):
+    req = json.loads((ROOT / "requests" / "demo" / "D09.json").read_text(encoding="utf-8"))
+    body = client.post("/v1/requests", json=req).json()
+    assert body["decision"] == "APPROVE_SPE"
+    assert set(body["workspace"]["rows"]) == {"conditions", "medications", "encounters"}
+    assert body["verification"]["status"] == "match"

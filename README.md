@@ -30,7 +30,7 @@ Request JSON ──► AI moderation (whole request; no patient data) ┐
 - **Privacy:** counts below 10 are `<10`, small percentages/means `suppressed`, every requested group shown, halves round up.
 - **Guardian memory (`ehds/memory.py`).** The app remembers each organisation's earlier requests and the patient groups behind every number it released. The AI sees the earlier purposes; a forbidden request after an approved one is flagged as a purpose change. A new number whose patient group differs from an earlier released one by 1–9 patients is held back (`suppressed`), because subtracting the two would reveal a small group. This is a fixed rule, not AI. Demo: D06 (114 women with breast cancer) then D07 (40+: would be 111, so it is held back), then D08 (same group asks for records for insurance: rejected, purpose change flagged).
 - **Evidence Investigator (`ehds/evidence.py`).** After the numbers are protected, fixed caveats (counts are not causes, hidden groups) are added; with the AI on, a model reads only the question and the protected result and says what the numbers can and cannot show and what analysis would be stronger. It never changes numbers or decisions.
-- **Test requests** `requests/demo/D01–D08` (insurer fees, pharma sales reps, "does my neighbour have diabetes", records without a reason, an app company whose "research" is really a product launch) are in the sample list.
+- **Test requests** `requests/demo/D01–D09` (insurer fees, pharma sales reps, "does my neighbour have diabetes", records without a reason, an app company whose "research" is really a product launch, and D09: a justified records request that opens a secure workspace) are in the sample list.
 
 ## Layout
 

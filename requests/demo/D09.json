@@ -1,0 +1,19 @@
+{
+  "id": "D09",
+  "submitted": "2026-10-30T11:00:00+01:00",
+  "applicant": {
+    "name": "Dr. Lena Gruber",
+    "organisation": "Medical University of Innsbruck, cardiology research group",
+    "country": "AT"
+  },
+  "requested_as": "health data access application",
+  "requested_format": "pseudonymised records",
+  "requested_records": ["conditions", "medications", "encounters"],
+  "purpose": "Scientific research on stroke prevention: we study which anticoagulant treatment sequences in older patients with atrial fibrillation are followed by hospital stays. Statistics are not enough: the analysis needs each patient's treatment history over time.",
+  "question": "Provide pseudonymised diagnoses, medications and hospital stays for patients aged 65 or older with atrial fibrillation.",
+  "definitions": [
+    "Atrial fibrillation = any condition with an ICD-10 code starting with I48.",
+    "Cohort = patients aged 65 or older on 31 December 2025 with atrial fibrillation.",
+    "Report the size of the cohort you would make available."
+  ]
+}
