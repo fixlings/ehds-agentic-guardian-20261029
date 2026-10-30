@@ -89,7 +89,7 @@
     const permit = encodeURIComponent(w.permit);
     const c = el("section", "workspace");
     const head = el("div", "ws-head");
-    head.append(el("span", "ws-title", `Secure workspace · permit ${w.permit}`), el("span", "ws-status", "Open · no download"));
+    head.append(el("span", "ws-title", `Secure workspace · permit ${w.permit}`));
     c.append(head, el("p", "ws-note", "Pseudonymised records (no names) for your approved cohort. You analyse them here; the data cannot be downloaded. Only reviewed, anonymised results may leave."));
     const tiles = el("div", "ws-tiles");
     const tile = (k, v) => { const t = el("div", "ws-tile"); t.append(el("b", "", v), el("span", "", k)); tiles.append(t); };
@@ -414,7 +414,6 @@
       for (const smp of samples) await post("/v1/requests", smp);
       $("s-load").disabled = false; loadStaff(); loadAudit();
     };
-    fetch("/v1/requests/ai-status").then((r) => r.json()).then((s) => { $("model-mode").textContent = s.enabled ? "AI check: on" : "AI check: off (rules only)"; }).catch(() => {});
     COUNTRIES.forEach(([c, n]) => $("f-country").append(new Option(n, c)));
     const pickDef = $("f-def-pick");
     pickDef.append(new Option("+ Add a ready-made line…", ""));
