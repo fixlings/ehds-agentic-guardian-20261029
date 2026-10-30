@@ -11,6 +11,7 @@
   "purpose": "Scientific research on how physical activity relates to type 2 diabetes.",
   "question": "How many patients have type 2 diabetes, by region, so we know where to launch our premium coaching subscription first?",
   "definitions": [
-    "Type 2 diabetes = ICD-10 code starting with E11."
+    "Type 2 diabetes = ICD-10 code starting with E11.",
+    "Report per region: patients with type 2 diabetes."
   ]
 }

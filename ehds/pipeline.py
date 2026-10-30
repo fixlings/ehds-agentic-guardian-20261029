@@ -49,6 +49,8 @@ def _compute(req: dict, d, out: dict, create_workspace: bool, ai_client=None) ->
             out["staff"]["flags"].append("Some definitions could not be interpreted; staff review recommended.")
         if d.decision == "APPROVE_STATISTICAL":
             answer, trace = engine.run(rc)
+            if not answer or all(v == {} for v in answer.values()):
+                answer = {"error": "The definitions do not say what to report (add a 'Report ...' line). No numbers were released."}
             out["verification"] = reference.verify_statistics(rc, answer, trace["raw_counts_staff_only"])
             if out["verification"]["status"] != "match":
                 out["staff"]["flags"].append(out["verification"]["detail"])

@@ -54,3 +54,9 @@ def test_memory_holds_no_ids_in_output():
     out = handle(REQ, create_workspace=False)
     assert "p-" not in json.dumps(out["answer"]) and "released_groups" not in json.dumps(out, default=str)
     assert memory.history(dict(REQ, id="Z"))[0]["id"] == "D06"
+
+
+def test_request_without_report_line_releases_nothing():
+    out = handle(dict(REQ, id="E1", definitions=["Breast cancer = any condition with an ICD-10 code starting with C50."]),
+                 create_workspace=False)
+    assert "error" in out["answer"] and "evidence" not in out
