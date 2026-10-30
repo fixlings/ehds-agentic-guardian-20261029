@@ -172,6 +172,163 @@ def test_scenario_a_near_miss_json_validates() -> None:
     assert "XYZ999" not in result.model_dump_json()
 
 
+def test_age_band_prose_validates_scenario_a() -> None:
+    """The prompt's age sentence is not an age-band enum and used to be query_schema."""
+    client = _Proposal(
+        {
+            "proposed_purpose": "public_health_research",
+            "needs_clarification": True,
+            "query": {
+                "measures": ["count"],
+                "group_by": [],
+                "filters": {
+                    "sex": "female",
+                    "age_bands": "50-59, 60-69, and 70+",
+                    "bmi_bands": ["obese"],
+                    "breast_cancer": True,
+                    "coded": [
+                        {
+                            "system": "ICD-10",
+                            "code": "C50",
+                            "display": "Malignant neoplasm of breast",
+                            "source_text": "breast cancer",
+                            "negated": False,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+    interpreter = Interpreter(client=client, propose_query=True)
+    result = interpreter.interpret(
+        "How many women aged 50 or older have breast cancer and BMI >=30?",
+        _session(),
+    )
+    assert interpreter.validated_live_response is True
+    assert result.query is not None
+    filters = result.query.filters
+    assert [item.value for item in result.query.measures] == ["count"]
+    assert filters.sex == "female"
+    assert [band.value for band in filters.age_bands] == ["50-59", "60-69", "70+"]
+    assert [band.value for band in filters.bmi_bands] == ["obese"]
+    assert filters.breast_cancer is True
+    assert "validation_category:ok" in result.notes
+
+    prose = _Proposal(
+        {
+            "proposed_purpose": "public_health_research",
+            "query": {
+                "measures": "count",
+                "filters": {
+                    "sex": ["female"],
+                    "age_bands": ["50-59", "60-69", "and 70+"],
+                    "bmi_bands": "obese only",
+                    "breast_cancer": "breast cancer",
+                    "coded": [{"system": "ICD-10", "code": "C50"}],
+                },
+            },
+        }
+    )
+    second = Interpreter(client=prose, propose_query=True).interpret(
+        "How many women aged 50 or older have breast cancer and BMI >=30?",
+        _session(),
+    )
+    assert second.query is not None
+    assert second.query.filters.sex == "female"
+    assert [band.value for band in second.query.filters.age_bands] == ["50-59", "60-69", "70+"]
+    assert [band.value for band in second.query.filters.bmi_bands] == ["obese"]
+    assert second.query.filters.breast_cancer is True
+    assert [item.value for item in second.query.measures] == ["count"]
+
+
+def test_rejected_proposal_names_the_field() -> None:
+    invented = _Proposal(
+        {
+            "proposed_purpose": "public_health_research",
+            "query": {
+                "measures": ["count"],
+                "filters": {
+                    "sex": "female",
+                    "coded": [
+                        {
+                            "system": "ICD-10",
+                            "code": "XYZ999",
+                            "display": "supercancer",
+                            "source_text": "supercancer",
+                            "negated": False,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+    unexpected = _Proposal(
+        {
+            "proposed_purpose": "public_health_research",
+            "query": {
+                "measures": ["count"],
+                "filters": {"sex": "female", "breast_cancer": True, "age_min": 50},
+            },
+        }
+    )
+    sql = _Proposal(
+        {
+            "proposed_purpose": "public_health_research",
+            "query": {
+                "sql": "select * from patients",
+                "measures": ["count"],
+                "filters": {"sex": "female", "breast_cancer": True},
+            },
+        }
+    )
+    message = "How many women have breast cancer?"
+    invented_result = Interpreter(client=invented, propose_query=True).interpret(message, _session())
+    unexpected_result = Interpreter(client=unexpected, propose_query=True).interpret(message, _session())
+    sql_result = Interpreter(client=sql, propose_query=True).interpret(message, _session())
+    diagnosis = _Proposal(
+        {
+            "proposed_purpose": "public_health_research",
+            "query": {
+                "measures": ["count"],
+                "filters": {"sex": "female", "breast_cancer": "supercancer"},
+            },
+        }
+    )
+    diagnosis_result = Interpreter(client=diagnosis, propose_query=True).interpret(message, _session())
+    assert invented_result.query is None
+    assert unexpected_result.query is None
+    assert sql_result.query is None
+    assert diagnosis_result.query is None
+    assert "validation_category:unlisted_code.filters.coded: expected allowlisted code" in invented_result.notes
+    assert (
+        "validation_category:unexpected_field.filters.age_min: expected no extra field"
+        in unexpected_result.notes
+    )
+    assert "validation_category:forbidden_field.query.sql: expected no executable field" in sql_result.notes
+    assert (
+        "validation_category:query_schema.filters.breast_cancer: expected boolean"
+        in diagnosis_result.notes
+    )
+    assert "XYZ999" not in invented_result.model_dump_json()
+    assert "select * from patients" not in sql_result.model_dump_json()
+
+
+def test_live_response_format_is_strict_query_schema() -> None:
+    from mistralai.client.models.responseformat import ResponseFormat
+
+    from guardian.nlp.interpreter import _live_response_format
+
+    fmt = _live_response_format()
+    ResponseFormat.model_validate(fmt)
+    assert fmt["type"] == "json_schema"
+    assert fmt["json_schema"]["strict"] is True
+    age = fmt["json_schema"]["schema"]["properties"]["query"]["properties"]["filters"]["properties"]["age_bands"]
+    assert age["type"] == "array"
+    assert age["items"]["enum"] == ["18-39", "40-49", "50-59", "60-69", "70+"]
+    breast = fmt["json_schema"]["schema"]["properties"]["query"]["properties"]["filters"]["properties"]["breast_cancer"]
+    assert breast["type"] == "boolean"
+
+
 def test_model_exception_is_not_swallowed() -> None:
     interpreter = Interpreter(
         client=_Proposal(RuntimeError("SUPER_SECRET_KEY_SENTINEL timeout")),

@@ -79,20 +79,33 @@ class MistralEuClient:
         system: str,
         user: str,
         timeout_s: float | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         timeout = timeout_s if timeout_s is not None else self._timeout_s
         attempts = MAX_MODEL_RETRIES + 1
         last_err: Exception | None = None
         for _ in range(attempts):
             try:
-                return self._complete_once(model=model, system=system, user=user, timeout_s=timeout)
+                return self._complete_once(
+                    model=model,
+                    system=system,
+                    user=user,
+                    timeout_s=timeout,
+                    response_format=response_format,
+                )
             except Exception as exc:  # noqa: BLE001 — retry boundary
                 last_err = exc
         assert last_err is not None
         raise last_err
 
     def _complete_once(
-        self, *, model: str, system: str, user: str, timeout_s: float
+        self,
+        *,
+        model: str,
+        system: str,
+        user: str,
+        timeout_s: float,
+        response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         response = self._client.chat.complete(
             model=model,
@@ -100,7 +113,7 @@ class MistralEuClient:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            response_format={"type": "json_object"},
+            response_format=response_format or {"type": "json_object"},
             temperature=0,
             timeout_ms=int(timeout_s * 1000),
         )

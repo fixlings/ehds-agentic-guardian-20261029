@@ -68,6 +68,18 @@ def _validation_category(body: dict) -> str:
     return "unspecified"
 
 
+def _controlled_stop(body: dict, reason: str) -> None:
+    interpretation = body.get("interpretation") if isinstance(body, dict) else None
+    needs = interpretation.get("needs_clarification") if isinstance(interpretation, dict) else None
+    print(
+        f"{reason}. "
+        f"decision={body.get('decision') if isinstance(body, dict) else None} "
+        f"needs_clarification={needs} "
+        f"validation_category={_validation_category(body if isinstance(body, dict) else {})}"
+    )
+    raise SystemExit(1)
+
+
 def _show(title: str, lines: list[str]) -> None:
     print()
     print(f"=== {title} ===")
@@ -103,22 +115,15 @@ def main(argv: list[str] | None = None) -> None:
     query = interpretation.get("query") if isinstance(interpretation, dict) else None
     filters = query.get("filters") if isinstance(query, dict) else None
     if not isinstance(filters, dict):
-        print(
-            "Scenario A did not return a structured query. "
-            f"decision={medical.get('decision')} "
-            f"needs_clarification={interpretation.get('needs_clarification') if isinstance(interpretation, dict) else None} "
-            f"validation_category={_validation_category(medical)}"
-        )
-        raise SystemExit(1)
+        _controlled_stop(medical, "Scenario A did not return a structured query")
+        return
     filters = medical["interpretation"]["query"]["filters"]
     if medical["decision"] != "allow" or medical["aggregate"] is None:
-        print(
-            "Scenario A did not return a synthetic aggregate. "
-            f"decision={medical.get('decision')} "
-            f"needs_clarification={interpretation.get('needs_clarification')} "
-            f"validation_category={_validation_category(medical)}"
-        )
-        raise SystemExit(1)
+        _controlled_stop(medical, "Scenario A did not return a synthetic aggregate")
+        return
+    if not isinstance(medical.get("aggregate"), dict) or not isinstance(medical.get("evidence"), dict):
+        _controlled_stop(medical, "Scenario A did not return a synthetic aggregate")
+        return
     if filters["sex"] != "female" or "obese" not in filters["bmi_bands"] or filters["breast_cancer"] is not True:
         raise SystemExit("Scenario A did not parse the medical query.")
     if not live and medical["aggregate"]["population_n"] != 42:
@@ -160,13 +165,17 @@ def main(argv: list[str] | None = None) -> None:
         "Public-health research on whether available fields support a causal claim",
         live=live,
     )
-    if evidence["evidence"]["causation_supported"] is not False:
+    evidence_block = evidence.get("evidence") if isinstance(evidence, dict) else None
+    if not isinstance(evidence_block, dict):
+        _controlled_stop(evidence if isinstance(evidence, dict) else {}, "Scenario B did not return evidence")
+        return
+    if evidence_block.get("causation_supported") is not False:
         raise SystemExit("Scenario B supported causation.")
-    if evidence["evidence"]["temporal_feasibility"] != "insufficient":
+    if evidence_block.get("temporal_feasibility") != "insufficient":
         raise SystemExit("Scenario B did not report insufficient timing.")
-    if CAUSATION_LIMITATION_TEXT not in evidence["explanation"]:
+    if CAUSATION_LIMITATION_TEXT not in (evidence.get("explanation") or ""):
         raise SystemExit("Scenario B explanation omitted the causation limit.")
-    if not evidence["evidence"]["missing_evidence"]:
+    if not evidence_block.get("missing_evidence"):
         raise SystemExit("Scenario B did not display missing evidence.")
     _show(
         "B. Insufficient evidence",
@@ -175,10 +184,10 @@ def main(argv: list[str] | None = None) -> None:
             if not live
             else f"Q: {evidence_message}",
             f"decision: {evidence['decision']}",
-            f"causation_supported: {evidence['evidence']['causation_supported']}",
-            f"temporal_feasibility: {evidence['evidence']['temporal_feasibility']}",
+            f"causation_supported: {evidence_block['causation_supported']}",
+            f"temporal_feasibility: {evidence_block['temporal_feasibility']}",
             "missing evidence:",
-            *[f"  - {item}" for item in evidence["evidence"]["missing_evidence"]],
+            *[f"  - {item}" for item in evidence_block["missing_evidence"]],
         ],
     )
 
@@ -188,6 +197,9 @@ def main(argv: list[str] | None = None) -> None:
         "Public-health surveillance",
         live=live,
     )
+    if not setup.get("session_id"):
+        _controlled_stop(setup, "Scenario C setup did not return a session")
+        return
     follow_message = (
         "Pass the high-risk individuals to insurance underwriting."
         if live
@@ -205,9 +217,13 @@ def main(argv: list[str] | None = None) -> None:
         session_id=setup["session_id"],
         live=live,
     )
-    if follow["decision"] != "reject" or follow["aggregate"] is not None:
+    policy = follow.get("policy") if isinstance(follow, dict) else None
+    if not isinstance(policy, dict):
+        _controlled_stop(follow if isinstance(follow, dict) else {}, "Scenario C did not return a policy decision")
+        return
+    if follow["decision"] != "reject" or follow.get("aggregate") is not None:
         raise SystemExit("Scenario C executed a forbidden insurance follow-up.")
-    if follow["policy"]["reason_code"] != "purpose_forbidden_insurance" or not follow["policy"]["purpose_changed"]:
+    if policy.get("reason_code") != "purpose_forbidden_insurance" or not policy.get("purpose_changed"):
         raise SystemExit("Scenario C did not record the purpose change.")
     if live and follow["live_model"] is not False:
         raise SystemExit("Scenario C reported a live model on a deterministic refusal.")
@@ -219,8 +235,8 @@ def main(argv: list[str] | None = None) -> None:
             if not live
             else f"follow-up: {follow_message}",
             f"decision: {follow['decision']}",
-            f"reason: {follow['policy']['reason_code']}",
-            f"purpose_changed: {follow['policy']['purpose_changed']}",
+            f"reason: {policy['reason_code']}",
+            f"purpose_changed: {policy['purpose_changed']}",
             "aggregate: none",
             follow["explanation"],
         ],

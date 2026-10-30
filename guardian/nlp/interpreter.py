@@ -14,12 +14,19 @@ from pydantic import ValidationError
 
 from guardian.contracts import SYNTHETIC_DATASET_ID
 from guardian.contracts.schemas import (
+    AgeBand,
+    BmiBand,
+    CodeSystem,
     CodedFilter,
+    GroupBy,
     Interpretation,
+    Measure,
     PopulationFilters,
     PurposeCategory,
+    Region,
     SessionContext,
     StructuredQuery,
+    Timing,
 )
 from guardian.nlp.normalizer import Normalizer
 
@@ -29,6 +36,71 @@ purpose_change_suspected, identity_disclosure_suspected, injection_suspected (bo
 Do not include medical codes, filters, SQL, or query fields. Those are filled locally."""
 
 _FORBIDDEN_KEYS = {"sql", "statement", "script", "exec"}
+
+
+def _enum_json(values: list[str]) -> dict:
+    return {"type": "string", "enum": values}
+
+
+def _array_json(item: dict) -> dict:
+    return {"type": "array", "items": item}
+
+
+def _object_json(properties: dict) -> dict:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": list(properties),
+        "properties": properties,
+    }
+
+
+def _live_response_format() -> dict:
+    """Strict JSON schema for the EU Mistral proposal. Enums match StructuredQuery."""
+    coded = _object_json(
+        {
+            "system": _enum_json([item.value for item in CodeSystem]),
+            "code": {"type": "string"},
+            "display": {"type": "string"},
+            "source_text": {"type": "string"},
+            "negated": {"type": "boolean"},
+        }
+    )
+    filters = _object_json(
+        {
+            "sex": _enum_json(["female", "male", "any"]),
+            "age_bands": _array_json(_enum_json([item.value for item in AgeBand])),
+            "bmi_bands": _array_json(_enum_json([item.value for item in BmiBand])),
+            "exclude_bmi_bands": _array_json(_enum_json([item.value for item in BmiBand])),
+            "breast_cancer": {"type": "boolean"},
+            "coded": _array_json(coded),
+            "regions": _array_json(_enum_json([item.value for item in Region])),
+            "timing": _array_json(_enum_json([item.value for item in Timing])),
+        }
+    )
+    query = _object_json(
+        {
+            "measures": _array_json(_enum_json([item.value for item in Measure])),
+            "group_by": _array_json(_enum_json([item.value for item in GroupBy])),
+            "filters": filters,
+            "user_claim": {"type": "string"},
+        }
+    )
+    root = _object_json(
+        {
+            "proposed_purpose": _enum_json([item.value for item in PurposeCategory]),
+            "purpose_change_suspected": {"type": "boolean"},
+            "identity_disclosure_suspected": {"type": "boolean"},
+            "injection_suspected": {"type": "boolean"},
+            "needs_clarification": {"type": "boolean"},
+            "unresolved_terms": _array_json({"type": "string"}),
+            "query": query,
+        }
+    )
+    return {
+        "type": "json_schema",
+        "json_schema": {"name": "EhdsQueryProposal", "schema": root, "strict": True},
+    }
 
 
 class ModelCallError(RuntimeError):
@@ -212,6 +284,7 @@ class Interpreter:
                 system=self._live_system_prompt(),
                 user=user_payload,
                 timeout_s=MODEL_TIMEOUT_S,
+                response_format=_live_response_format(),
             )
         except Exception:
             raise ModelCallError("EU Mistral did not return JSON") from None
@@ -264,16 +337,30 @@ class Interpreter:
             "query contains measures, group_by, filters, user_claim. "
             "filters contains sex, age_bands, bmi_bands, exclude_bmi_bands, breast_cancer, coded, regions, timing. "
             "coded items contain system, code, display, source_text, negated. "
+            "JSON types are mandatory. measures, age_bands, bmi_bands, exclude_bmi_bands, "
+            "group_by, regions, timing, and coded are arrays. "
+            "sex is one string, not an array. breast_cancer is a boolean, not a diagnosis name. "
+            "Do not join enums into one comma-separated string. Do not prefix a band with and. "
+            "Example: {\"proposed_purpose\":\"public_health_research\",\"needs_clarification\":false,"
+            "\"purpose_change_suspected\":false,\"identity_disclosure_suspected\":false,"
+            "\"injection_suspected\":false,\"unresolved_terms\":[],"
+            "\"query\":{\"measures\":[\"count\"],\"group_by\":[],\"user_claim\":\"\","
+            "\"filters\":{\"sex\":\"female\",\"age_bands\":[\"50-59\",\"60-69\",\"70+\"],"
+            "\"bmi_bands\":[\"obese\"],\"exclude_bmi_bands\":[],\"breast_cancer\":true,"
+            "\"coded\":[{\"system\":\"ICD-10\",\"code\":\"C50\","
+            "\"display\":\"Malignant neoplasm of breast\",\"source_text\":\"breast cancer\","
+            "\"negated\":false}],\"regions\":[],\"timing\":[]}}}. "
             "Never add a sql field or any executable text."
         )
 
     def _validate_proposal(self, raw: dict, message: str) -> Interpretation:
-        if _contains_forbidden(raw):
-            raise _ProposalRejected("forbidden_field")
+        forbidden = _forbidden_path(raw)
+        if forbidden is not None:
+            raise _ProposalRejected(f"forbidden_field.{forbidden}: expected no executable field")
         if "proposed_purpose" in raw and raw.get("proposed_purpose") not in (None, ""):
             proposed = _purpose(raw.get("proposed_purpose"))
             if proposed is None:
-                raise _ProposalRejected("purpose_invalid")
+                raise _ProposalRejected("purpose_invalid.proposed_purpose: expected purpose enum")
         else:
             proposed = PurposeCategory.unknown
         flags = _flag_dict(raw)
@@ -301,14 +388,14 @@ class Interpreter:
         body["dataset_id"] = self._dataset_id
         try:
             query = StructuredQuery.model_validate(body)
-        except ValidationError:
-            raise _ProposalRejected("query_schema") from None
+        except ValidationError as exc:
+            raise _ProposalRejected(_schema_from_validation(exc)) from None
         query = self._enforce_vocabulary(query, message)
         query = _derive_breast_cancer(query)
         if model_claim or self._message_has_causal_cue(message):
             query = query.model_copy(update={"user_claim": message})
         if not _has_population_constraint(query.filters):
-            raise _ProposalRejected("no_population_constraint")
+            raise _ProposalRejected("no_population_constraint.filters: expected a population constraint")
         return self._noted(
             Interpretation(
                 proposed_purpose=proposed,
@@ -330,7 +417,7 @@ class Interpreter:
         for coded in query.filters.coded:
             row = allowed.get((coded.system.value, coded.code))
             if row is None:
-                raise _ProposalRejected("unlisted_code")
+                raise _ProposalRejected("unlisted_code.filters.coded: expected allowlisted code")
             source = coded.source_text.strip()
             if not source or source.casefold() not in folded_message:
                 source = row["aliases"][0]
@@ -409,17 +496,65 @@ def _terms_in_message(value: object, message: str) -> list[str]:
     return terms
 
 
-def _contains_forbidden(value: object) -> bool:
+def _forbidden_path(value: object, prefix: str = "") -> str | None:
     if isinstance(value, dict):
         for key, child in value.items():
+            token = key if isinstance(key, str) and key.isidentifier() and len(key) <= 40 else "field"
+            path = f"{prefix}.{token}" if prefix else token
             if not isinstance(key, str) or key.casefold() in _FORBIDDEN_KEYS or "sql" in key.casefold():
-                return True
-            if _contains_forbidden(child):
-                return True
-        return False
+                return path
+            found = _forbidden_path(child, path)
+            if found is not None:
+                return found
+        return None
     if isinstance(value, list):
-        return any(_contains_forbidden(item) for item in value)
-    return False
+        for item in value:
+            found = _forbidden_path(item, prefix)
+            if found is not None:
+                return found
+    return None
+
+
+def _schema(path: str, expected: str) -> str:
+    return f"query_schema.{path}: expected {expected}"
+
+
+def _field_token(key: object) -> str:
+    if isinstance(key, str) and key.isidentifier() and len(key) <= 40:
+        return key
+    return "field"
+
+
+_SCHEMA_EXPECTED = {
+    "measures": "array of measure enum",
+    "group_by": "array of group-by enum",
+    "filters": "object",
+    "sex": "sex enum",
+    "age_bands": "array of age-band enum",
+    "bmi_bands": "array of bmi-band enum",
+    "exclude_bmi_bands": "array of bmi-band enum",
+    "breast_cancer": "boolean",
+    "coded": "array of coded filters",
+    "regions": "array of region enum",
+    "timing": "array of timing enum",
+    "system": "code system enum",
+    "code": "allowlisted code",
+    "display": "string",
+    "source_text": "string",
+    "negated": "boolean",
+    "user_claim": "string",
+    "query": "object",
+}
+
+
+def _schema_from_validation(exc: ValidationError) -> str:
+    errors = exc.errors()
+    if not errors:
+        return "query_schema.query: expected structured query"
+    loc = [str(part) for part in errors[0].get("loc", ()) if not isinstance(part, int)]
+    field = loc[-1] if loc else "query"
+    path = ".".join(loc) if loc else "query"
+    return _schema(path, _SCHEMA_EXPECTED.get(field, "schema value"))
 
 
 def _has_population_constraint(filters: PopulationFilters) -> bool:
@@ -484,15 +619,17 @@ def _as_list(value: object) -> list[object]:
     return [value]
 
 
-def _drop_unknown(obj: dict, allowed: frozenset[str]) -> dict:
+def _drop_unknown(obj: dict, allowed: frozenset[str], *, path: str) -> dict:
     cleaned: dict = {}
     for key, value in obj.items():
         if not isinstance(key, str):
-            raise _ProposalRejected("unexpected_field")
+            raise _ProposalRejected(f"unexpected_field.{path}: expected no extra field")
         if key in _METADATA_KEYS:
             continue
         if key not in allowed:
-            raise _ProposalRejected("unexpected_field")
+            raise _ProposalRejected(
+                f"unexpected_field.{path}.{_field_token(key)}: expected no extra field"
+            )
         cleaned[key] = value
     return cleaned
 
@@ -527,17 +664,57 @@ def _alias_indexes(lexicon: dict) -> tuple[dict[str, list[str]], dict[str, list[
     return age, bmi, sex, regions, measures
 
 
-def _expand(values: object, index: dict[str, list[str]]) -> list[str]:
+def _strip_leading_and(text: str) -> str:
+    stripped = text.strip()
+    if stripped.casefold().startswith("and "):
+        return stripped[4:].strip()
+    return stripped
+
+
+def _comma_pieces(text: str) -> list[str]:
+    pieces: list[str] = []
+    for piece in text.split(","):
+        cleaned = _strip_leading_and(piece)
+        if cleaned:
+            pieces.append(cleaned)
+    return pieces
+
+
+def _lookup_band(text: str, index: dict[str, list[str]], *, strip_only: bool) -> list[str] | None:
+    cleaned = _strip_leading_and(text)
+    match = index.get(_compact(cleaned))
+    if match is not None:
+        return match
+    if strip_only:
+        folded = _fold_alias(cleaned)
+        if folded.endswith(" only"):
+            return index.get(_compact(folded[: -len(" only")]))
+    return None
+
+
+def _expand(
+    values: object,
+    index: dict[str, list[str]],
+    *,
+    path: str,
+    expected: str,
+    strip_only: bool = False,
+) -> list[str]:
     out: list[str] = []
     for value in _as_list(values):
-        if not isinstance(value, str) or not value.strip():
-            raise _ProposalRejected("query_schema")
-        match = index.get(_compact(value))
-        if not match:
-            raise _ProposalRejected("query_schema")
-        for item in match:
-            if item not in out:
-                out.append(item)
+        if isinstance(value, str):
+            pieces = _comma_pieces(value)
+        else:
+            raise _ProposalRejected(_schema(path, expected))
+        if isinstance(value, str) and value.strip() and not pieces:
+            raise _ProposalRejected(_schema(path, expected))
+        for text in pieces:
+            match = _lookup_band(text, index, strip_only=strip_only)
+            if not match:
+                raise _ProposalRejected(_schema(path, expected))
+            for item in match:
+                if item not in out:
+                    out.append(item)
     return out
 
 
@@ -551,41 +728,63 @@ def _lookup_code(lexicon: dict, system: str, code: str) -> dict | None:
 
 def _normalize_system(value: object) -> str:
     if not isinstance(value, str) or not value.strip():
-        raise _ProposalRejected("query_schema")
+        raise _ProposalRejected(_schema("filters.coded.system", "code system enum"))
     folded = value.casefold().replace(" ", "").replace("_", "")
     mapped = _SYSTEM_ALIASES.get(folded)
     if mapped is None:
-        raise _ProposalRejected("unlisted_code")
+        raise _ProposalRejected("unlisted_code.filters.coded.system: expected allowlisted code system")
     return mapped
 
 
-def _as_bool(value: object) -> bool | None:
+def _as_bool(value: object, *, path: str, lexicon: dict | None = None) -> bool | None:
     if isinstance(value, bool) or value is None:
         return value
-    if isinstance(value, str) and value.casefold() in {"true", "false", "yes", "no"}:
-        return value.casefold() in {"true", "yes"}
-    raise _ProposalRejected("query_schema")
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        folded = value.casefold().strip()
+        if folded in {"true", "yes"}:
+            return True
+        if folded in {"false", "no"}:
+            return False
+        if lexicon is not None and _is_breast_cancer_alias(value, lexicon):
+            return True
+    raise _ProposalRejected(_schema(path, "boolean"))
+
+
+def _is_breast_cancer_alias(value: str, lexicon: dict) -> bool:
+    compact = _compact(value)
+    if not compact:
+        return False
+    for row in lexicon["codes"]:
+        if row.get("system") != "ICD-10" or not str(row.get("code", "")).startswith("C50"):
+            continue
+        if compact == _compact(str(row["code"])):
+            return True
+        if any(_compact(str(alias)) == compact for alias in row.get("aliases", [])):
+            return True
+    return False
 
 
 def _canonical_coded(value: object, lexicon: dict) -> list[dict]:
     cleaned: list[dict] = []
     for item in _as_list(value):
         if not isinstance(item, dict):
-            raise _ProposalRejected("query_schema")
-        item = _drop_unknown(item, _CODED_KEYS)
+            raise _ProposalRejected(_schema("filters.coded", "array of coded filters"))
+        item = _drop_unknown(item, _CODED_KEYS, path="filters.coded")
         system = _normalize_system(item.get("system"))
         code = item.get("code")
         if not isinstance(code, str) or not code.strip():
-            raise _ProposalRejected("query_schema")
+            raise _ProposalRejected(_schema("filters.coded.code", "allowlisted code"))
         row = _lookup_code(lexicon, system, code.strip())
         if row is None:
-            raise _ProposalRejected("unlisted_code")
+            raise _ProposalRejected("unlisted_code.filters.coded: expected allowlisted code")
         source = item.get("source_text")
         if not isinstance(source, str) or not source.strip():
             source = row["aliases"][0]
         else:
             source = source.strip()
-        negated = _as_bool(item.get("negated", False))
+        negated = _as_bool(item.get("negated", False), path="filters.coded.negated")
         cleaned.append(
             {
                 "system": row["system"],
@@ -598,43 +797,84 @@ def _canonical_coded(value: object, lexicon: dict) -> list[dict]:
     return cleaned
 
 
+def _one_sex(value: object, sex: dict[str, str]) -> str:
+    if isinstance(value, list):
+        if len(value) != 1:
+            raise _ProposalRejected(_schema("filters.sex", "sex enum"))
+        value = value[0]
+    mapped = sex.get(_compact(value)) if isinstance(value, str) else None
+    if mapped is None:
+        raise _ProposalRejected(_schema("filters.sex", "sex enum"))
+    return mapped
+
+
 def _canonicalize_filters(filters: dict, lexicon: dict) -> dict:
     age, bmi, sex, regions, _measures = _alias_indexes(lexicon)
     if "sex" in filters:
-        mapped = sex.get(_compact(filters["sex"])) if isinstance(filters["sex"], str) else None
-        if mapped is None:
-            raise _ProposalRejected("query_schema")
-        filters["sex"] = mapped
+        filters["sex"] = _one_sex(filters["sex"], sex)
     if "age_bands" in filters:
-        filters["age_bands"] = _expand(filters["age_bands"], age)
+        filters["age_bands"] = _expand(
+            filters["age_bands"],
+            age,
+            path="filters.age_bands",
+            expected="array of age-band enum",
+        )
     if "bmi_bands" in filters:
-        filters["bmi_bands"] = _expand(filters["bmi_bands"], bmi)
+        filters["bmi_bands"] = _expand(
+            filters["bmi_bands"],
+            bmi,
+            path="filters.bmi_bands",
+            expected="array of bmi-band enum",
+            strip_only=True,
+        )
     if "exclude_bmi_bands" in filters:
-        filters["exclude_bmi_bands"] = _expand(filters["exclude_bmi_bands"], bmi)
+        filters["exclude_bmi_bands"] = _expand(
+            filters["exclude_bmi_bands"],
+            bmi,
+            path="filters.exclude_bmi_bands",
+            expected="array of bmi-band enum",
+            strip_only=True,
+        )
     if "regions" in filters:
-        mapped_regions: list[str] = []
-        for value in _as_list(filters["regions"]):
-            if not isinstance(value, str):
-                raise _ProposalRejected("query_schema")
-            name = regions.get(_compact(value))
-            if name is None:
-                raise _ProposalRejected("query_schema")
-            if name not in mapped_regions:
-                mapped_regions.append(name)
-        filters["regions"] = mapped_regions
+        filters["regions"] = _enum_pieces(
+            filters["regions"],
+            regions,
+            path="filters.regions",
+            expected="array of region enum",
+        )
     if "timing" in filters:
-        mapped_timing: list[str] = []
-        for value in _as_list(filters["timing"]):
-            if not isinstance(value, str) or value not in _TIMING:
-                raise _ProposalRejected("query_schema")
-            if value not in mapped_timing:
-                mapped_timing.append(value)
-        filters["timing"] = mapped_timing
+        filters["timing"] = _enum_pieces(
+            filters["timing"],
+            {name: name for name in _TIMING},
+            path="filters.timing",
+            expected="array of timing enum",
+        )
     if "breast_cancer" in filters:
-        filters["breast_cancer"] = _as_bool(filters["breast_cancer"])
+        filters["breast_cancer"] = _as_bool(
+            filters["breast_cancer"],
+            path="filters.breast_cancer",
+            lexicon=lexicon,
+        )
     if "coded" in filters:
         filters["coded"] = _canonical_coded(filters["coded"], lexicon)
     return filters
+
+
+def _enum_pieces(values: object, index: dict[str, str], *, path: str, expected: str) -> list[str]:
+    out: list[str] = []
+    for value in _as_list(values):
+        if not isinstance(value, str):
+            raise _ProposalRejected(_schema(path, expected))
+        pieces = _comma_pieces(value) or ([value.strip()] if value.strip() else [])
+        if value.strip() and not pieces:
+            raise _ProposalRejected(_schema(path, expected))
+        for text in pieces:
+            name = index.get(_compact(text))
+            if name is None:
+                raise _ProposalRejected(_schema(path, expected))
+            if name not in out:
+                out.append(name)
+    return out
 
 
 def _normalize_query_dict(raw: dict, lexicon: dict) -> dict:
@@ -660,42 +900,53 @@ def _normalize_query_dict(raw: dict, lexicon: dict) -> dict:
     query = dict(query)
     filters = query.get("filters") or {}
     if not isinstance(filters, dict):
-        raise _ProposalRejected("query_schema")
+        raise _ProposalRejected(_schema("filters", "object"))
     filters = dict(filters)
     for key in _FILTER_KEYS:
         if key in query and key not in filters:
             filters[key] = query.pop(key)
-    query = _drop_unknown(query, _QUERY_KEYS)
-    filters = _drop_unknown(filters, _FILTER_KEYS)
+    query = _drop_unknown(query, _QUERY_KEYS, path="query")
+    filters = _drop_unknown(filters, _FILTER_KEYS, path="filters")
     query = {key: value for key, value in query.items() if key != "filters"}
     query["filters"] = _canonicalize_filters(filters, lexicon)
     if query.get("measures") in (None, [], ""):
-        raise _ProposalRejected("query_schema")
+        raise _ProposalRejected(_schema("measures", "array of measure enum"))
     _age, _bmi, _sex, _regions, measures = _alias_indexes(lexicon)
     query["measures"] = [_one_measure(item, measures) for item in _as_list(query["measures"])]
     if not query["measures"]:
-        raise _ProposalRejected("query_schema")
+        raise _ProposalRejected(_schema("measures", "array of measure enum"))
     if "group_by" in query:
         query["group_by"] = _canonical_group_by(query["group_by"])
     return query
 
 
 def _one_measure(value: object, measures: dict[str, str]) -> str:
+    if isinstance(value, str):
+        pieces = _comma_pieces(value) or [value]
+        if len(pieces) != 1:
+            raise _ProposalRejected(_schema("measures", "array of measure enum"))
+        value = pieces[0]
     if not isinstance(value, str):
-        raise _ProposalRejected("query_schema")
+        raise _ProposalRejected(_schema("measures", "array of measure enum"))
     mapped = measures.get(_compact(value))
     if mapped is None:
-        raise _ProposalRejected("query_schema")
+        raise _ProposalRejected(_schema("measures", "array of measure enum"))
     return mapped
 
 
 def _canonical_group_by(values: object) -> list[str]:
     out: list[str] = []
     for value in _as_list(values):
-        if not isinstance(value, str) or value not in _GROUP_BY:
-            raise _ProposalRejected("query_schema")
-        if value not in out:
-            out.append(value)
+        if not isinstance(value, str):
+            raise _ProposalRejected(_schema("group_by", "array of group-by enum"))
+        pieces = _comma_pieces(value)
+        if value.strip() and not pieces:
+            raise _ProposalRejected(_schema("group_by", "array of group-by enum"))
+        for text in pieces:
+            if text not in _GROUP_BY:
+                raise _ProposalRejected(_schema("group_by", "array of group-by enum"))
+            if text not in out:
+                out.append(text)
     return out
 
 
