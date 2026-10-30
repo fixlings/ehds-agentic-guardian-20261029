@@ -89,7 +89,7 @@
     const permit = encodeURIComponent(w.permit);
     const c = el("section", "workspace");
     const head = el("div", "ws-head");
-    head.append(el("span", "ws-title", `Secure workspace · permit ${w.permit}`), el("span", "ws-status", "Open · downloads blocked"));
+    head.append(el("span", "ws-title", `Secure workspace · permit ${w.permit}`), el("span", "ws-status", "Open · no download"));
     c.append(head, el("p", "ws-note", "Pseudonymised records (no names) for your approved cohort. You analyse them here; the data cannot be downloaded. Only reviewed, anonymised results may leave."));
     const tiles = el("div", "ws-tiles");
     const tile = (k, v) => { const t = el("div", "ws-tile"); t.append(el("b", "", v), el("span", "", k)); tiles.append(t); };
@@ -111,18 +111,14 @@
       });
     });
     const run = el("button", "secondary-button", "Run query"); run.type = "button";
-    const dl = el("button", "ws-danger", "Download the data"); dl.type = "button";
     run.onclick = async () => {
       const r = await post(`/v1/workspaces/${permit}/query`, { sql: q.value });
       if (r.status !== 200) { res.replaceChildren(el("p", "ws-blocked", `Blocked: ${r.body.detail}`)); return; }
       res.replaceChildren(table(r.body.columns, r.body.rows), el("p", "form-note", `${r.body.total_rows} rows${r.body.total_rows > r.body.rows.length ? ` (first ${r.body.rows.length} shown)` : ""}. ${r.body.note}`));
     };
-    dl.onclick = async () => {
-      const r = await post(`/v1/workspaces/${permit}/download`);
-      res.replaceChildren(el("p", "ws-blocked", `Download refused (HTTP ${r.status}). ${r.body.message}`));
-    };
-    const actions = el("div", "ws-actions"); actions.append(run, dl);
-    c.append(el("span", "ws-label", "Try a query"), chips, q, actions, res);
+    const lock = el("div", "ws-lock", "🔒 Download is not possible. There is no export: data and patient IDs never leave this workspace (Art. 73). Only summary results are shown here.");
+    const actions = el("div", "ws-actions"); actions.append(run);
+    c.append(lock, el("span", "ws-label", "Try a query"), chips, q, actions, res);
     return c;
   }
 

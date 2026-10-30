@@ -112,14 +112,14 @@ def download(permit_id: str) -> JSONResponse:
 @router.post("/workspaces/{permit_id}/query")
 def workspace_query(permit_id: str, body: WorkspaceQuery) -> dict:
     try:
-        df = workspace.run_query(permit_id, body.sql)
+        df = workspace.view(permit_id, body.sql)
     except PermissionError as exc:
         raise HTTPException(403, str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(404, "No workspace for this permit.") from exc
     head = df.head(MAX_SPE_ROWS)
     return {"columns": list(head.columns), "rows": jsonable_encoder(head.astype(object).where(head.notna(), None).values.tolist()),
-            "total_rows": len(df), "note": "Rows stay inside the secure processing environment; export is blocked."}
+            "total_rows": len(df), "note": "Summary only. Patient-level data cannot leave the secure processing environment."}
 
 
 @router.get("/audit")

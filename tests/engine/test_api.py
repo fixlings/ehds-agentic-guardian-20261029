@@ -47,7 +47,7 @@ def test_formal_route_rejects_incomplete_request(client):
 
 def test_ui_is_served_without_external_assets(client):
     page = client.get("/")
-    assert page.status_code == 200 and 'src="/formal.js"' in page.text
+    assert page.status_code == 200 and 'src="/formal.js' in page.text
     assert "https://" not in page.text and "API_KEY" not in page.text
     assert client.get("/formal.js").status_code == 200
     assert client.get("/v1/requests/ai-status").json() == {"enabled": False}
@@ -99,3 +99,12 @@ def test_demo_d09_opens_secure_workspace(client):
     assert body["decision"] == "APPROVE_SPE"
     assert set(body["workspace"]["rows"]) == {"conditions", "medications", "encounters"}
     assert body["verification"]["status"] == "match"
+
+
+def test_workspace_shows_summaries_only(client):
+    client.post("/v1/requests", json=_req("R05"))
+    ok = client.post("/v1/workspaces/R05/query", json={"sql": "SELECT count(*) AS patients FROM cohort"})
+    assert ok.status_code == 200
+    for sql in ["SELECT * FROM cohort", "SELECT * FROM conditions LIMIT 5",
+                "SELECT max(patient_id) AS x FROM cohort", "SELECT patient_id, count(*) FROM conditions GROUP BY patient_id"]:
+        assert client.post("/v1/workspaces/R05/query", json={"sql": sql}).status_code == 403, sql

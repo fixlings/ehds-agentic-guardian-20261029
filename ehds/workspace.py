@@ -102,6 +102,38 @@ def run_query(permit: str, sql: str):
     return df
 
 
+SUMMARY = re.compile(r"(?i)\b(count|avg|sum|min|max|median|stddev\w*|quantile\w*)\s*\(")
+
+
+def _ids(permit: str) -> set[str]:
+    con = duckdb.connect(str(path(permit)), read_only=True, config={"enable_external_access": False})
+    try:
+        tables = {r[0] for r in con.execute("SELECT table_name FROM information_schema.tables").fetchall()}
+        ids = {str(r[0]) for r in con.execute("SELECT patient_id FROM cohort").fetchall()}
+        if "encounters" in tables:
+            ids |= {str(r[0]) for r in con.execute("SELECT encounter_id FROM encounters").fetchall()}
+    finally:
+        con.close()
+    return ids
+
+
+def view(permit: str, sql: str):
+    """Query whose result is shown outside the workspace: summaries only, never rows or IDs."""
+    if not SUMMARY.search(sql):
+        audit.log("workspace_view_blocked", permit=permit, sql=sql[:200], why="no summary")
+        raise PermissionError("Only summary results (count, avg, sum, min, max ...) can be shown. "
+                              "Patient-level rows stay inside the secure processing environment.")
+    df = run_query(permit, sql)
+    ids = _ids(permit)
+    cols = [str(c).lower() for c in df.columns]
+    if any("patient_id" in c or "encounter_id" in c for c in cols) or any(
+            str(v) in ids for v in df.astype(str).to_numpy().ravel()):
+        audit.log("workspace_view_blocked", permit=permit, sql=sql[:200], why="identifiers in result")
+        raise PermissionError("The result contains patient or encounter IDs. Identifiers never leave the "
+                              "secure processing environment.")
+    return df
+
+
 def download(permit: str, what: str = "all") -> dict:
     audit.log("download_blocked", permit=permit, what=what)
     return {"allowed": False,

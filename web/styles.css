@@ -289,6 +289,7 @@ pre.sql { white-space: pre-wrap; font-size: 11px; background: #f1f6fd; padding: 
 .ws-chip:hover { background: #173d66; }
 .ws-sql { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace; font-size: 12px; background: #081a33; color: #e5f0ff; border: 1px solid #2c4c75; border-radius: 8px; padding: 10px; }
 .ws-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.ws-lock { border: 1px solid #b4485a; background: rgba(180, 72, 90, .15); color: #ffd6dc; border-radius: 8px; padding: 10px 12px; font-size: 13px; font-weight: 650; }
 .ws-danger { border-radius: 8px; padding: 10px 14px; background: transparent; color: #ffb4bd; border: 1px solid #b4485a; font-size: 12px; font-weight: 780; cursor: pointer; }
 .ws-result { background: #fff; color: var(--ink); border-radius: 10px; padding: 4px 12px; }
 .ws-result:empty { display: none; }
